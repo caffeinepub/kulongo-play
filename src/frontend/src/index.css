@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/assets/fonts/PlusJakartaSans.woff2") format("woff2");
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.625rem;
+    /* Deep Purple theme - Kulongo Play */
+    --background: 0.09 0.07 290;
+    --foreground: 0.97 0.005 290;
+    --card: 0.13 0.07 290;
+    --card-foreground: 0.97 0.005 290;
+    --popover: 0.15 0.07 290;
+    --popover-foreground: 0.97 0.005 290;
+    --primary: 0.73 0.2 50;
+    --primary-foreground: 0.09 0.07 290;
+    --secondary: 0.17 0.08 290;
+    --secondary-foreground: 0.97 0.005 290;
+    --muted: 0.18 0.07 290;
+    --muted-foreground: 0.7 0.04 290;
+    --accent: 0.73 0.2 50;
+    --accent-foreground: 0.09 0.07 290;
+    --destructive: 0.65 0.22 25;
+    --destructive-foreground: 0.97 0.005 290;
+    --border: 0.21 0.07 290;
+    --input: 0.21 0.07 290;
+    --ring: 0.73 0.2 50;
+    --chart-1: 0.73 0.2 50;
+    --chart-2: 0.65 0.15 300;
+    --chart-3: 0.7 0.18 140;
+    --chart-4: 0.6 0.2 30;
+    --chart-5: 0.72 0.1 200;
+    --sidebar: 0.1 0.07 290;
+    --sidebar-foreground: 0.97 0.005 290;
+    --sidebar-primary: 0.73 0.2 50;
+    --sidebar-primary-foreground: 0.09 0.07 290;
+    --sidebar-accent: 0.17 0.08 290;
+    --sidebar-accent-foreground: 0.97 0.005 290;
+    --sidebar-border: 0.21 0.07 290;
+    --sidebar-ring: 0.73 0.2 50;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: oklch(var(--background));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(var(--border));
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(var(--muted-foreground) / 0.5);
+  }
+}
