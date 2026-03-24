@@ -11,16 +11,19 @@ import { useAllSongs, useSongsByGenre } from "../hooks/useQueries";
 const DESTAQUES = [
   {
     label: "Afro Hits",
+    slug: "afro-hits",
     sub: "Os maiores hits africanos",
     image: "/assets/generated/destaques-afro-hits.dim_400x400.jpg",
   },
   {
     label: "Top Vibes",
+    slug: "top-vibes",
     sub: "Energia e ritmo puro",
     image: "/assets/generated/destaques-top-vibes.dim_400x400.jpg",
   },
   {
     label: "Relax",
+    slug: "relax",
     sub: "Música para relaxar",
     image: "/assets/generated/destaques-relax.dim_400x400.jpg",
   },
@@ -109,35 +112,40 @@ export default function HomePage() {
         <SectionHeader title="Destaques" showAll />
         <div className="grid grid-cols-3 gap-3 sm:gap-4">
           {DESTAQUES.map((item, i) => (
-            <motion.div
+            <Link
               key={item.label}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.1 }}
-              className="relative rounded-2xl overflow-hidden cursor-pointer group aspect-square"
+              to="/playlist/$mood"
+              params={{ mood: item.slug }}
               data-ocid={`home.destaques.item.${i + 1}`}
             >
-              <img
-                src={item.image}
-                alt={item.label}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              />
-              {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-              {/* Hover orange border */}
-              <div className="absolute inset-0 rounded-2xl border-2 border-transparent group-hover:border-primary/70 transition-colors duration-300" />
-              {/* Play button on hover */}
-              <div className="absolute top-2 right-2 w-8 h-8 rounded-full bg-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-glow-sm scale-75 group-hover:scale-100">
-                <Play className="w-4 h-4 text-primary-foreground fill-primary-foreground ml-0.5" />
-              </div>
-              {/* Text at bottom */}
-              <div className="absolute bottom-0 left-0 right-0 p-3">
-                <p className="text-white font-bold text-sm leading-tight">
-                  {item.label}
-                </p>
-                <p className="text-white/60 text-xs mt-0.5">{item.sub}</p>
-              </div>
-            </motion.div>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: i * 0.1 }}
+                className="relative rounded-2xl overflow-hidden cursor-pointer group aspect-square"
+              >
+                <img
+                  src={item.image}
+                  alt={item.label}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                {/* Gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                {/* Hover orange border */}
+                <div className="absolute inset-0 rounded-2xl border-2 border-transparent group-hover:border-primary/70 transition-colors duration-300" />
+                {/* Play button on hover */}
+                <div className="absolute top-2 right-2 w-8 h-8 rounded-full bg-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-glow-sm scale-75 group-hover:scale-100">
+                  <Play className="w-4 h-4 text-primary-foreground fill-primary-foreground ml-0.5" />
+                </div>
+                {/* Text at bottom */}
+                <div className="absolute bottom-0 left-0 right-0 p-3">
+                  <p className="text-white font-bold text-sm leading-tight">
+                    {item.label}
+                  </p>
+                  <p className="text-white/60 text-xs mt-0.5">{item.sub}</p>
+                </div>
+              </motion.div>
+            </Link>
           ))}
         </div>
       </section>

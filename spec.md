@@ -1,22 +1,29 @@
 # Kulongo Play
 
 ## Current State
-The app uses Internet Identity for authentication. The backend has authorization component integrated. Currently, the app loads without requiring login - no dedicated login/signup screen exists for listeners. The `showProfileSetup` modal appears after login but there's no explicit auth gate.
+The home page shows three Destaques cards (Afro Hits, Top Vibes, Relax) as visual elements but clicking them does nothing. Songs are already stored with genres (kuduro, rap, gospel) in the backend.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `AuthPage` component: a full-screen listener login/signup screen shown when user is not authenticated
-- The page shows the Kulongo Play logo, a welcome message, and two CTA buttons: "Entrar com Google" and "Entrar com Email" -- both trigger Internet Identity login (since that's the underlying auth on ICP)
-- Auth gate in `App.tsx` `RootLayout`: if not authenticated, render `AuthPage` instead of the main app
+- New `PlaylistPage` component at `src/frontend/src/pages/PlaylistPage.tsx`
+- Route `/playlist/:mood` in App.tsx
+- The page shows songs filtered by mood:
+  - `afro-hits` → kuduro genre
+  - `top-vibes` → rap genre
+  - `relax` → gospel genre
+- Header with mood name, cover image, description, and a "Play All" button
+- Song list with SongCard (list variant) for each song
+- Empty state if no songs for that genre
 
 ### Modify
-- `App.tsx` `RootLayout`: check `identity` from `useInternetIdentity` -- if null/undefined and not initializing, show `AuthPage` full-screen; otherwise show normal layout
+- `HomePage.tsx`: Make each Destaque card a Link to `/playlist/<mood-slug>` (afro-hits, top-vibes, relax)
+- `App.tsx`: Add `playlistRoute` with path `/playlist/$mood`
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
-1. Create `src/frontend/src/pages/AuthPage.tsx` with a beautiful branded login/signup screen showing logo, tagline, and two buttons (Google + Email) both calling `login()` from `useInternetIdentity`
-2. Update `RootLayout` in `App.tsx` to gate on authentication: if `!identity && !isInitializing`, render `<AuthPage />` instead of the main layout
-3. The auth page must match the app's dark purple theme, show the Kulongo logo symbol, have vibrant orange CTA buttons, and feel premium like a streaming platform
+1. Create `PlaylistPage.tsx` using mood param to determine genre, fetch songs, display in a scrollable list with play-all support
+2. Add route to `App.tsx`
+3. Wrap Destaque cards in `<Link>` elements pointing to correct `/playlist/<slug>` URLs

@@ -21,6 +21,7 @@ import { useCallerProfile } from "./hooks/useQueries";
 import ArtistPage from "./pages/ArtistPage";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
+import PlaylistPage from "./pages/PlaylistPage";
 import ProfilePage from "./pages/ProfilePage";
 import SearchPage from "./pages/SearchPage";
 import UploadPage from "./pages/UploadPage";
@@ -63,12 +64,16 @@ function RootLayout() {
     return <AuthPage />;
   }
 
+  // Listeners skip profile setup -- check if user already chose "ouvinte"
+  const isListener = localStorage.getItem("kulongo_user_role") === "ouvinte";
+
   const showProfileSetup =
     !!identity &&
     !actorFetching &&
     !profileLoading &&
     isFetched &&
-    profile === null;
+    profile === null &&
+    !isListener;
 
   return (
     <div className="min-h-screen bg-background">
@@ -118,6 +123,11 @@ const artistRoute = createRoute({
   path: "/artist/$name",
   component: ArtistPage,
 });
+const playlistRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/playlist/$mood",
+  component: PlaylistPage,
+});
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
@@ -125,6 +135,7 @@ const routeTree = rootRoute.addChildren([
   uploadRoute,
   profileRoute,
   artistRoute,
+  playlistRoute,
 ]);
 
 const router = createRouter({ routeTree, defaultPreload: "intent" });

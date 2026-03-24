@@ -2,14 +2,19 @@ import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { Home, Search, Upload, User } from "lucide-react";
 
-const navItems = [
-  { to: "/", icon: Home, label: "Início" },
-  { to: "/search", icon: Search, label: "Pesquisar" },
-  { to: "/upload", icon: Upload, label: "Carregar" },
-  { to: "/profile", icon: User, label: "Perfil" },
+const ALL_NAV_ITEMS = [
+  { to: "/", icon: Home, label: "Início", artistOnly: false },
+  { to: "/search", icon: Search, label: "Pesquisar", artistOnly: false },
+  { to: "/upload", icon: Upload, label: "Carregar", artistOnly: true },
+  { to: "/profile", icon: User, label: "Perfil", artistOnly: false },
 ];
 
 export default function BottomNav() {
+  const role = localStorage.getItem("kulongo_user_role");
+  const navItems = ALL_NAV_ITEMS.filter(
+    (item) => !item.artistOnly || role === "artista",
+  );
+
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-xl border-t border-border"

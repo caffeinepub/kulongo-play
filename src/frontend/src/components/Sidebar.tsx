@@ -2,15 +2,19 @@ import { cn } from "@/lib/utils";
 import { Link, useLocation } from "@tanstack/react-router";
 import { Home, Music, Search, Upload, User } from "lucide-react";
 
-const NAV_ITEMS = [
-  { to: "/", icon: Home, label: "Início" },
-  { to: "/search", icon: Search, label: "Pesquisar" },
-  { to: "/upload", icon: Upload, label: "Carregar" },
-  { to: "/profile", icon: User, label: "Perfil" },
+const ALL_NAV_ITEMS = [
+  { to: "/", icon: Home, label: "Início", artistOnly: false },
+  { to: "/search", icon: Search, label: "Pesquisar", artistOnly: false },
+  { to: "/upload", icon: Upload, label: "Carregar", artistOnly: true },
+  { to: "/profile", icon: User, label: "Perfil", artistOnly: false },
 ];
 
 export default function Sidebar() {
   const { pathname } = useLocation();
+  const role = localStorage.getItem("kulongo_user_role");
+  const navItems = ALL_NAV_ITEMS.filter(
+    (item) => !item.artistOnly || role === "artista",
+  );
 
   return (
     <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-56 flex-col bg-sidebar border-r border-sidebar-border z-40 pt-0">
@@ -40,7 +44,7 @@ export default function Sidebar() {
 
       {/* Nav links */}
       <nav className="flex-1 px-3 py-4 space-y-1" data-ocid="sidebar.nav.panel">
-        {NAV_ITEMS.map(({ to, icon: Icon, label }) => {
+        {navItems.map(({ to, icon: Icon, label }) => {
           const isActive = pathname === to;
           return (
             <Link
