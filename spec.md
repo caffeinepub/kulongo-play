@@ -1,29 +1,24 @@
 # Kulongo Play
 
 ## Current State
-The home page shows three Destaques cards (Afro Hits, Top Vibes, Relax) as visual elements but clicking them does nothing. Songs are already stored with genres (kuduro, rap, gospel) in the backend.
+App de streaming musical com registo de artistas/ouvintes, upload de músicas, player, perfis de artistas, playlists por humor, e pesquisa. Sem painel de administração.
 
 ## Requested Changes (Diff)
 
 ### Add
-- New `PlaylistPage` component at `src/frontend/src/pages/PlaylistPage.tsx`
-- Route `/playlist/:mood` in App.tsx
-- The page shows songs filtered by mood:
-  - `afro-hits` → kuduro genre
-  - `top-vibes` → rap genre
-  - `relax` → gospel genre
-- Header with mood name, cover image, description, and a "Play All" button
-- Song list with SongCard (list variant) for each song
-- Empty state if no songs for that genre
+- Rota `/admin/katson/2024` que acede ao painel de administração sem necessidade de login normal
+- Página AdminPage com dashboard de gestão completa
+- Backend: função `adminDeleteSong` (admin pode apagar qualquer música), `getAdminStats` (estatísticas da plataforma), `getAllProfiles` (lista todos os artistas)
 
 ### Modify
-- `HomePage.tsx`: Make each Destaque card a Link to `/playlist/<mood-slug>` (afro-hits, top-vibes, relax)
-- `App.tsx`: Add `playlistRoute` with path `/playlist/$mood`
+- App.tsx: adicionar rota admin fora do layout principal (sem auth gate)
+- Backend main.mo: adicionar funções de admin com verificação de role #admin
 
 ### Remove
-- Nothing removed
+- Nada
 
 ## Implementation Plan
-1. Create `PlaylistPage.tsx` using mood param to determine genre, fetch songs, display in a scrollable list with play-all support
-2. Add route to `App.tsx`
-3. Wrap Destaque cards in `<Link>` elements pointing to correct `/playlist/<slug>` URLs
+1. Modificar backend para adicionar adminDeleteSong, getAdminStats, getAllProfiles
+2. Criar AdminPage.tsx com tabs: Visão Geral (stats), Músicas (lista + apagar), Artistas (lista de perfis)
+3. Criar AdminLayout sem auth gate
+4. Atualizar App.tsx para registar rota /admin/katson/2024 fora do RootLayout

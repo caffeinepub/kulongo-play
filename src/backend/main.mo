@@ -84,6 +84,11 @@ actor {
     socialLinks : ?Text;
   };
 
+  type ArtistEntry = {
+    principal : Principal;
+    profile : UserProfile;
+  };
+
   // MAPS AND SETS
   let songs = Map.empty<SongId, SongEntry>();
 
@@ -283,6 +288,24 @@ actor {
       Runtime.trap("Unauthorized: Only users can update profiles");
     };
     userProfiles.add(caller, { displayName; bio; coverBlobId; socialLinks });
+  };
+
+  // Get all artist profiles (admin only)
+  public query ({ caller }) func getAllUserProfiles() : async [ArtistEntry] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view all profiles");
+    };
+    userProfiles.toArray().map(func((p, profile)) { { principal = p; profile } });
+  };
+
+  // ADMIN: Delete any song regardless of ownership
+  public shared ({ caller }) func adminDeleteSong(songId : SongId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can use this function");
+    };
+    songs.remove(songId);
+    songExtras.remove(songId);
+    songLikes.remove(songId);
   };
 
   // PROFILE VISIT TRACKING

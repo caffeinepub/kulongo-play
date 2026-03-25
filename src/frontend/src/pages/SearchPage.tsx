@@ -20,7 +20,9 @@ const GENRE_LABELS: Record<string, string> = {
 const SK5 = ["a", "b", "c", "d", "e"];
 
 export default function SearchPage() {
-  const searchParams = useSearch({ from: "/search" }) as { q?: string };
+  const searchParams = useSearch({ from: "/app-layout/search" }) as {
+    q?: string;
+  };
   const [query, setQuery] = useState(searchParams.q ?? "");
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const { play } = usePlayer();

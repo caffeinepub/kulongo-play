@@ -18,6 +18,7 @@ import { useActor } from "./hooks/useActor";
 import { InternetIdentityProvider } from "./hooks/useInternetIdentity";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { useCallerProfile } from "./hooks/useQueries";
+import AdminPage from "./pages/AdminPage";
 import ArtistPage from "./pages/ArtistPage";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
@@ -96,46 +97,63 @@ function RootLayout() {
   );
 }
 
-const rootRoute = createRootRoute({ component: RootLayout });
+const rootRoute = createRootRoute({ component: () => <Outlet /> });
+
+// App layout (auth-gated)
+const appLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "app-layout",
+  component: RootLayout,
+});
+
+// Admin route (no auth gate from RootLayout)
+const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/katson/2024",
+  component: AdminPage,
+});
 
 const homeRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/",
   component: HomePage,
 });
 const searchRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/search",
   component: SearchPage,
 });
 const uploadRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/upload",
   component: UploadPage,
 });
 const profileRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/profile",
   component: ProfilePage,
 });
 const artistRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/artist/$name",
   component: ArtistPage,
 });
 const playlistRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/playlist/$mood",
   component: PlaylistPage,
 });
 
 const routeTree = rootRoute.addChildren([
-  homeRoute,
-  searchRoute,
-  uploadRoute,
-  profileRoute,
-  artistRoute,
-  playlistRoute,
+  appLayoutRoute.addChildren([
+    homeRoute,
+    searchRoute,
+    uploadRoute,
+    profileRoute,
+    artistRoute,
+    playlistRoute,
+  ]),
+  adminRoute,
 ]);
 
 const router = createRouter({ routeTree, defaultPreload: "intent" });

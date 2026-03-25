@@ -25,6 +25,10 @@ export interface UserProfile {
     socialLinks?: string;
     coverBlobId?: ExternalBlob;
 }
+export interface ArtistEntry {
+    principal: Principal;
+    profile: UserProfile;
+}
 export interface SongMetadata {
     title: SongTitle;
     likeCount: bigint;
@@ -59,8 +63,10 @@ export enum UserRole {
 export interface backendInterface {
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     deleteSong(songId: SongId): Promise<void>;
+    adminDeleteSong(songId: SongId): Promise<void>;
     getAllSongIds(): Promise<Array<SongId>>;
     getAllSongs(): Promise<Array<SongMetadata>>;
+    getAllUserProfiles(): Promise<Array<ArtistEntry>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getSongLikes(songId: SongId): Promise<Array<Uploader>>;

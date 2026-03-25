@@ -33,7 +33,7 @@ const MOOD_MAP: Record<
 };
 
 export default function PlaylistPage() {
-  const { mood } = useParams({ from: "/playlist/$mood" });
+  const { mood } = useParams({ from: "/app-layout/playlist/$mood" });
   const info = MOOD_MAP[mood];
   const { data: songs = [], isLoading } = useSongsByGenre(
     info?.genre ?? SongGenre.kuduro,

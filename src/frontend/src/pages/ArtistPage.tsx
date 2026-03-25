@@ -81,7 +81,7 @@ function formatVisitCount(count: bigint): string {
 }
 
 export default function ArtistPage() {
-  const { name } = useParams({ from: "/artist/$name" });
+  const { name } = useParams({ from: "/app-layout/artist/$name" });
   const decodedName = decodeURIComponent(name);
   const { data: songs = [], isLoading } = useSongsByArtist(decodedName);
   const { play } = usePlayer();
