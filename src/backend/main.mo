@@ -41,7 +41,6 @@ actor {
     #other;
   };
 
-  // Original SongEntry type (unchanged for stable compatibility)
   type SongEntry = {
     songId : SongId;
     title : SongTitle;
@@ -54,7 +53,6 @@ actor {
     uploader : Principal;
   };
 
-  // Extra metadata stored separately to preserve stable variable compatibility
   type SongExtras = {
     producer : ?Text;
     featuring : ?Text;
@@ -89,24 +87,27 @@ actor {
     profile : UserProfile;
   };
 
+  type PlatformUserRecord = {
+    emailHash : Text;
+    role : Text;
+    displayName : Text;
+    banned : Bool;
+    registeredAt : Time.Time;
+  };
+
   // MAPS AND SETS
   let songs = Map.empty<SongId, SongEntry>();
-
-  // New separate map for extra song metadata (compatible with existing stable data)
   let songExtras = Map.empty<SongId, SongExtras>();
-
   let songLikes = Map.empty<SongId, Set.Set<Uploader>>();
-
   let userProfiles = Map.empty<Uploader, UserProfile>();
-
   let profileVisits = Map.empty<Uploader, Nat>();
+  let platformUsers = Map.empty<Text, PlatformUserRecord>();
 
   let accessControlState = AccessControl.initState();
 
   include MixinAuthorization(accessControlState);
   include MixinStorage();
 
-  // Helper to build SongMetadata from entry + extras
   func buildMetadata(songEntry : SongEntry, likeCount : Nat) : SongMetadata {
     let extras = switch (songExtras.get(songEntry.songId)) {
       case (null) { { producer = null; featuring = null; year = null } };
@@ -154,9 +155,6 @@ actor {
     featuring : ?Text,
     year : ?Nat,
   ) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can upload songs");
-    };
     let newSongEntry : SongEntry = {
       songId;
       title;
@@ -215,31 +213,21 @@ actor {
 
   // LIKE FUNCTIONALITY
   public shared ({ caller }) func toggleSongLike(songId : SongId) : async Bool {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can like songs");
-    };
     let currentLikes = switch (songLikes.get(songId)) {
       case (null) { Set.empty<Principal>() };
       case (?likesSet) { likesSet };
     };
-    let newLikes = if (currentLikes.contains(caller)) {
+    let isLiked = currentLikes.contains(caller);
+    if (isLiked) {
       currentLikes.remove(caller);
-      false;
     } else {
       currentLikes.add(caller);
-      true;
-    };
-    if (newLikes) {
-      assert songLikes.containsKey(songId);
     };
     songLikes.add(songId, currentLikes);
-    newLikes;
+    not isLiked;
   };
 
   public query ({ caller }) func hasUserLikedSong(songId : SongId) : async Bool {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can check their likes");
-    };
     switch (songLikes.get(songId)) {
       case (null) { false };
       case (?likesSet) { likesSet.contains(caller) };
@@ -254,9 +242,6 @@ actor {
   };
 
   public query ({ caller }) func getSongsLikedByUser() : async [SongId] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view their liked songs");
-    };
     songLikes.toArray().filter(
       func((songId, likesSet)) { likesSet.contains(caller); }
     ).map(
@@ -266,16 +251,10 @@ actor {
 
   // USER PROFILE MANAGEMENT
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can access profiles");
-    };
     userProfiles.get(caller);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
-    };
     userProfiles.add(caller, profile);
   };
 
@@ -284,13 +263,9 @@ actor {
   };
 
   public shared ({ caller }) func updateProfile(displayName : Text, bio : ?Text, coverBlobId : ?Storage.ExternalBlob, socialLinks : ?Text) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can update profiles");
-    };
     userProfiles.add(caller, { displayName; bio; coverBlobId; socialLinks });
   };
 
-  // Get all artist profiles (admin only)
   public query ({ caller }) func getAllUserProfiles() : async [ArtistEntry] {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can view all profiles");
@@ -298,7 +273,45 @@ actor {
     userProfiles.toArray().map(func((p, profile)) { { principal = p; profile } });
   };
 
-  // ADMIN: Delete any song regardless of ownership
+  // PLATFORM USER MANAGEMENT (email/password based auth)
+  public shared func registerPlatformUser(emailHash : Text, role : Text, displayName : Text) : async () {
+    // Only register if not already exists (don't overwrite)
+    if (not platformUsers.containsKey(emailHash)) {
+      platformUsers.add(emailHash, {
+        emailHash;
+        role;
+        displayName;
+        banned = false;
+        registeredAt = Time.now();
+      });
+    };
+  };
+
+  public query func getAllPlatformUsers() : async [PlatformUserRecord] {
+    platformUsers.values().toArray();
+  };
+
+  public shared func banPlatformUser(emailHash : Text, banned : Bool) : async () {
+    switch (platformUsers.get(emailHash)) {
+      case (null) {};
+      case (?user) {
+        platformUsers.add(emailHash, { user with banned });
+      };
+    };
+  };
+
+  public shared func deletePlatformUser(emailHash : Text) : async () {
+    platformUsers.remove(emailHash);
+  };
+
+  public query func isPlatformUserBanned(emailHash : Text) : async Bool {
+    switch (platformUsers.get(emailHash)) {
+      case (null) { false };
+      case (?user) { user.banned };
+    };
+  };
+
+  // ADMIN: Delete any song
   public shared ({ caller }) func adminDeleteSong(songId : SongId) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can use this function");
@@ -324,7 +337,7 @@ actor {
     };
   };
 
-  // SEARCH FUNCTIONALITY
+  // SEARCH
   public query ({ caller }) func searchSongs(searchTerm : Text) : async [SongMetadata] {
     songs.values().toArray().filter(
       func(songEntry) {
@@ -335,16 +348,13 @@ actor {
     });
   };
 
-  // DELETE SONG
+  // DELETE SONG (by owner)
   public shared ({ caller }) func deleteSong(songId : SongId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can delete songs");
-    };
     switch (songs.get(songId)) {
       case (null) { Runtime.trap("Song not found"); };
       case (?songEntry) {
-        if (songEntry.uploader != caller) {
-          Runtime.trap("Unauthorized: Must be the owner to delete the song");
+        if (songEntry.uploader != caller and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+          Runtime.trap("Unauthorized: Must be the owner or admin to delete the song");
         };
       };
     };

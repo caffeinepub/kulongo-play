@@ -7,7 +7,6 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
 import BottomNav from "./components/BottomNav";
 import Header from "./components/Header";
 import Player from "./components/Player";
@@ -16,7 +15,6 @@ import Sidebar from "./components/Sidebar";
 import { PlayerProvider } from "./context/PlayerContext";
 import { useActor } from "./hooks/useActor";
 import { InternetIdentityProvider } from "./hooks/useInternetIdentity";
-import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { useCallerProfile } from "./hooks/useQueries";
 import AdminPage from "./pages/AdminPage";
 import ArtistPage from "./pages/ArtistPage";
@@ -36,9 +34,16 @@ const queryClient = new QueryClient({
   },
 });
 
+function getCurrentSession() {
+  try {
+    return JSON.parse(localStorage.getItem("kulongo_session") ?? "null");
+  } catch {
+    return null;
+  }
+}
+
 // Root layout component
 function RootLayout() {
-  const { identity, isInitializing } = useInternetIdentity();
   const { isFetching: actorFetching } = useActor();
   const {
     data: profile,
@@ -46,30 +51,18 @@ function RootLayout() {
     isFetched,
   } = useCallerProfile();
 
-  // While auth is initializing, show a loading screen
-  if (isInitializing) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <img
-          src="/assets/uploads/img-20260324-wa0012_3-019d2186-3c1a-7650-b08c-92b83c484338-1.jpg"
-          alt="Kulongo Play"
-          className="w-16 h-16 rounded-2xl object-cover shadow-glow animate-pulse"
-        />
-        <Loader2 className="w-6 h-6 text-primary animate-spin" />
-      </div>
-    );
-  }
+  const session = getCurrentSession();
 
-  // If not authenticated, show auth gate
-  if (!identity) {
+  // If not logged in via local session, show auth gate
+  if (!session) {
     return <AuthPage />;
   }
 
-  // Listeners skip profile setup -- check if user already chose "ouvinte"
-  const isListener = localStorage.getItem("kulongo_user_role") === "ouvinte";
+  const isListener =
+    session.role === "ouvinte" ||
+    localStorage.getItem("kulongo_user_role") === "ouvinte";
 
   const showProfileSetup =
-    !!identity &&
     !actorFetching &&
     !profileLoading &&
     isFetched &&
@@ -109,7 +102,7 @@ const appLayoutRoute = createRoute({
 // Admin route (no auth gate from RootLayout)
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/admin/katson/2024",
+  path: "/admin",
   component: AdminPage,
 });
 

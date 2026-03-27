@@ -1,24 +1,28 @@
 # Kulongo Play
 
 ## Current State
-AuthPage has two login buttons in the login step: "Continuar com Google" and "Entrar com Email", both calling the same `login` function from Internet Identity.
+O admin dashboard lê dados de utilizadores (artistas e ouvintes) a partir do `localStorage` do browser local. Isso significa que o admin apenas vê utilizadores registados no seu próprio browser, nunca todos os utilizadores da plataforma. Os dados de músicas já estão no backend (canister) e funcionam.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Facebook login button
-- Instagram login button  
-- TikTok login button
-- Apple login button (optional, popular globally)
+- Backend: tipo `PlatformUserRecord` com campos `emailHash`, `role`, `displayName`, `banned`, `registeredAt`
+- Backend: `Map` `platformUsers` para guardar todos os registos
+- Backend: `registerPlatformUser(emailHash, role, displayName)` - chamado no registo
+- Backend: `getAllPlatformUsers()` - chamado pelo admin para ver todos
+- Backend: `banPlatformUser(emailHash, banned)` - admin ban/unban
+- Backend: `deletePlatformUser(emailHash)` - admin remove
 
 ### Modify
-- Login step layout to accommodate more social buttons in a clean grid or list
+- AuthPage: ao registar um novo utilizador, chamar `actor.registerPlatformUser(...)` para sincronizar com o backend
+- AdminPage: aba "Ouvintes" lê de `getAllPlatformUsers()` do backend (não localStorage)
+- AdminPage: estatísticas de ouvintes e artistas leem do backend
+- AdminPage: ban/unban e remoção de utilizadores operam via backend
 
 ### Remove
-- Nothing
+- AdminPage: dependência de `storedUsers` (localStorage) para contagens de stats e gestão de utilizadores
 
 ## Implementation Plan
-- Add Facebook, Instagram, TikTok social login buttons to the login step in AuthPage.tsx
-- All buttons call the same `login` function (Internet Identity handles auth under the hood)
-- Keep the same visual style: bordered cards with brand colors/icons
-- Arrange buttons in a clean list (same as current) or 2-column grid if 4+ options
+1. Adicionar tipos e funções ao `main.mo`
+2. Atualizar `AuthPage.tsx` para chamar o backend ao registar
+3. Atualizar `AdminPage.tsx` para ler utilizadores do backend

@@ -15,33 +15,72 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
+  Ban,
   Check,
   CreditCard,
   Disc3,
+  Edit2,
   Eye,
+  Headphones,
   Heart,
   Instagram,
   Loader2,
-  LogIn,
+  LogOut,
   Music,
   Package,
+  Save,
   Shield,
   Trash2,
   Users,
-  Youtube,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { ExternalBlob, SongMetadata, UserProfile } from "../backend";
 import { ReleaseType, SongGenre } from "../backend";
 import { useActor } from "../hooks/useActor";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
+
+const ADMIN_EMAIL = "sobangueleca87@gmail.com";
+const ADMIN_PASSWORD = "210987";
 
 type ArtistEntry = {
   principal: { toString(): string };
   profile: UserProfile & { coverBlobId?: ExternalBlob };
 };
+
+interface PlatformUserRecord {
+  emailHash: string;
+  role: string;
+  displayName: string;
+  banned: boolean;
+  registeredAt: bigint;
+}
+
+interface PaymentCoords {
+  kwik: { number: string; name: string; instructions: string };
+  unitel: { number: string; name: string; instructions: string };
+  express: { number: string; name: string; instructions: string };
+}
+
+const DEFAULT_COORDS: PaymentCoords = {
+  kwik: { number: "", name: "", instructions: "" },
+  unitel: { number: "", name: "", instructions: "" },
+  express: { number: "", name: "", instructions: "" },
+};
+
+function loadPaymentCoords(): PaymentCoords {
+  try {
+    return (
+      JSON.parse(localStorage.getItem("kulongo_payment_coords") ?? "null") ??
+      DEFAULT_COORDS
+    );
+  } catch {
+    return DEFAULT_COORDS;
+  }
+}
+
+function savePaymentCoords(coords: PaymentCoords) {
+  localStorage.setItem("kulongo_payment_coords", JSON.stringify(coords));
+}
 
 function formatDate(ns: bigint) {
   return new Date(Number(ns) / 1_000_000).toLocaleDateString("pt-PT");
@@ -68,6 +107,7 @@ const releaseLabel: Record<ReleaseType, string> = {
 const SKELETON_OVERVIEW = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
 const SKELETON_SONGS = ["a", "b", "c", "d", "e"];
 const SKELETON_ARTISTS = ["a", "b", "c", "d"];
+const SKELETON_USERS = ["a", "b", "c", "d"];
 
 const PLANS = [
   {
@@ -155,7 +195,11 @@ function parseSocialLinks(
 }
 
 export default function AdminPage() {
-  const { identity, login, isInitializing } = useInternetIdentity();
+  const [adminLoggedIn, setAdminLoggedIn] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+
   const { actor, isFetching: actorFetching } = useActor();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -168,14 +212,22 @@ export default function AdminPage() {
   >(null);
   const [paymentMethods, setPaymentMethods] = useState(PAYMENT_INITIAL);
 
-  const isAdmin = useQuery<boolean>({
-    queryKey: ["admin", "isAdmin"],
-    queryFn: async () => {
-      if (!actor) return false;
-      return actor.isCallerAdmin();
-    },
-    enabled: !!actor && !actorFetching && !!identity,
+  // Payment coordinates
+  const [paymentCoords, setPaymentCoords] =
+    useState<PaymentCoords>(loadPaymentCoords);
+  const [editingCoord, setEditingCoord] = useState<keyof PaymentCoords | null>(
+    null,
+  );
+  const [coordDraft, setCoordDraft] = useState({
+    number: "",
+    name: "",
+    instructions: "",
   });
+
+  // Users management
+  const [confirmBanUser, setConfirmBanUser] =
+    useState<PlatformUserRecord | null>(null);
+  const [userSearch, setUserSearch] = useState("");
 
   const songsQuery = useQuery<SongMetadata[]>({
     queryKey: ["admin", "songs"],
@@ -183,7 +235,7 @@ export default function AdminPage() {
       if (!actor) return [];
       return actor.getAllSongs();
     },
-    enabled: !!actor && !actorFetching && isAdmin.data === true,
+    enabled: !!actor && !actorFetching && adminLoggedIn,
   });
 
   const artistsQuery = useQuery<ArtistEntry[]>({
@@ -192,7 +244,18 @@ export default function AdminPage() {
       if (!actor) return [];
       return (actor as any).getAllUserProfiles() as Promise<ArtistEntry[]>;
     },
-    enabled: !!actor && !actorFetching && isAdmin.data === true,
+    enabled: !!actor && !actorFetching && adminLoggedIn,
+  });
+
+  const platformUsersQuery = useQuery<PlatformUserRecord[]>({
+    queryKey: ["admin", "platformUsers"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return (actor as any).getAllPlatformUsers() as Promise<
+        PlatformUserRecord[]
+      >;
+    },
+    enabled: !!actor && !actorFetching && adminLoggedIn,
   });
 
   const deleteMutation = useMutation({
@@ -204,6 +267,7 @@ export default function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ["admin", "songs"] });
       queryClient.invalidateQueries({ queryKey: ["songs"] });
       setConfirmDeleteId(null);
+      toast.success("Música eliminada com sucesso");
     },
   });
 
@@ -218,6 +282,7 @@ export default function AdminPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "artists"] });
       setConfirmDeleteArtistId(null);
+      toast.success("Artista eliminado com sucesso");
     },
     onError: (err: Error) => {
       if (err.message === "NOT_IMPLEMENTED") {
@@ -227,69 +292,155 @@ export default function AdminPage() {
     },
   });
 
-  if (isInitializing || actorFetching) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <img
-          src="/assets/uploads/img-20260324-wa0012_3-019d2186-3c1a-7650-b08c-92b83c484338-1.jpg"
-          alt="Kulongo Play"
-          className="w-16 h-16 rounded-2xl object-cover animate-pulse"
-        />
-        <Loader2 className="w-6 h-6 text-primary animate-spin" />
-      </div>
-    );
+  const banUserMutation = useMutation({
+    mutationFn: async ({
+      emailHash,
+      banned,
+    }: {
+      emailHash: string;
+      banned: boolean;
+    }) => {
+      return (actor as any).banPlatformUser(emailHash, banned);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "platformUsers"] });
+      setConfirmBanUser(null);
+      toast.success("Utilizador atualizado");
+    },
+    onError: () => {
+      toast.error("Erro ao atualizar utilizador");
+      setConfirmBanUser(null);
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (emailHash: string) => {
+      return (actor as any).deletePlatformUser(emailHash);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "platformUsers"] });
+      toast.success("Utilizador removido");
+    },
+    onError: () => {
+      toast.error("Erro ao remover utilizador");
+    },
+  });
+
+  function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+      setAdminLoggedIn(true);
+      setLoginError("");
+    } else {
+      setLoginError("Credenciais inválidas");
+    }
   }
 
-  if (!identity) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 px-4">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <img
-            src="/assets/uploads/img-20260324-wa0012_3-019d2186-3c1a-7650-b08c-92b83c484338-1.jpg"
-            alt="Kulongo Play"
-            className="w-20 h-20 rounded-2xl object-cover"
-          />
-          <h1 className="text-2xl font-bold text-foreground">
-            Admin Dashboard
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Inicia sessão para continuar
-          </p>
-        </div>
-        <Button
-          data-ocid="admin.login_button"
-          onClick={() => login()}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-        >
-          <LogIn className="w-4 h-4" />
-          Entrar com Internet Identity
-        </Button>
-      </div>
-    );
+  function startEditCoord(key: keyof PaymentCoords) {
+    setEditingCoord(key);
+    setCoordDraft({ ...paymentCoords[key] });
   }
 
-  if (isAdmin.isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
+  function saveCoord() {
+    if (!editingCoord) return;
+    const updated = { ...paymentCoords, [editingCoord]: coordDraft };
+    setPaymentCoords(updated);
+    savePaymentCoords(updated);
+    setEditingCoord(null);
+    toast.success("Coordenadas guardadas");
   }
 
-  if (!isAdmin.data) {
+  if (!adminLoggedIn) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 text-center px-4">
-        <AlertTriangle className="w-14 h-14 text-destructive" />
-        <h1 className="text-2xl font-bold text-foreground">Acesso Negado</h1>
-        <p className="text-muted-foreground text-sm">
-          Não tens permissão para aceder a esta área.
-        </p>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
+        <Card className="w-full max-w-sm bg-card border-border shadow-xl">
+          <CardContent className="p-8 flex flex-col gap-6">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <img
+                src="/assets/uploads/img-20260324-wa0012_3-019d2186-3c1a-7650-b08c-92b83c484338-1.jpg"
+                alt="Kulongo Play"
+                className="w-20 h-20 rounded-2xl object-cover"
+              />
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">
+                  Admin Dashboard
+                </h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Inicia sessão para continuar
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label
+                  className="text-sm font-medium text-foreground"
+                  htmlFor="admin-email"
+                >
+                  Email
+                </label>
+                <Input
+                  id="admin-email"
+                  data-ocid="admin.login.input"
+                  type="email"
+                  placeholder="Email do administrador"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setLoginError("");
+                  }}
+                  className="bg-background border-border"
+                  autoComplete="email"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label
+                  className="text-sm font-medium text-foreground"
+                  htmlFor="admin-password"
+                >
+                  Senha
+                </label>
+                <Input
+                  id="admin-password"
+                  data-ocid="admin.login.input"
+                  type="password"
+                  placeholder="Senha"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setLoginError("");
+                  }}
+                  className="bg-background border-border"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              {loginError && (
+                <p
+                  data-ocid="admin.login.error_state"
+                  className="text-sm text-destructive text-center"
+                >
+                  {loginError}
+                </p>
+              )}
+
+              <Button
+                data-ocid="admin.login.submit_button"
+                type="submit"
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 mt-1"
+              >
+                Entrar
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   const songs = songsQuery.data ?? [];
   const artists = artistsQuery.data ?? [];
+  const platformUsers = platformUsersQuery.data ?? [];
 
   const totalLikes = songs.reduce((acc, s) => acc + Number(s.likeCount), 0);
   const kuduroCount = songs.filter((s) => s.genre === SongGenre.kuduro).length;
@@ -304,10 +455,20 @@ export default function AdminPage() {
     (s) => s.releaseType === ReleaseType.album,
   ).length;
 
+  const ouvintesCount = platformUsers.filter(
+    (u) => u.role === "ouvinte",
+  ).length;
+
   const filteredSongs = songs.filter(
     (s) =>
       s.title.toLowerCase().includes(search.toLowerCase()) ||
       s.artist.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const filteredUsers = platformUsers.filter(
+    (u) =>
+      u.displayName.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.emailHash.toLowerCase().includes(userSearch.toLowerCase()),
   );
 
   const songToDelete = songs.find((s) => s.songId === confirmDeleteId);
@@ -317,6 +478,32 @@ export default function AdminPage() {
   const artistToDelete = confirmDeleteArtistId
     ? artists.find((a) => a.principal.toString() === confirmDeleteArtistId)
     : null;
+
+  const paymentMethodsConfig = [
+    {
+      key: "kwik" as const,
+      name: "Kwik",
+      desc: "Pagamento rápido via app Kwik — carteiras digitais angolanas",
+      color: "text-orange-400",
+    },
+    {
+      key: "unitel" as const,
+      name: "Unitel Money",
+      desc: "Transferência via Unitel Money — operadora líder em Angola",
+      color: "text-blue-400",
+    },
+    {
+      key: "express" as const,
+      name: "Express",
+      desc: "Pagamento Express — transferência bancária instantânea",
+      color: "text-green-400",
+    },
+  ];
+
+  const isOverviewLoading =
+    songsQuery.isLoading ||
+    artistsQuery.isLoading ||
+    platformUsersQuery.isLoading;
 
   return (
     <div className="min-h-screen bg-background">
@@ -332,11 +519,21 @@ export default function AdminPage() {
           </h1>
           <p className="text-xs text-primary leading-tight">Admin Dashboard</p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
           <Shield className="w-4 h-4 text-primary" />
           <span className="text-xs text-muted-foreground hidden sm:inline">
-            {identity.getPrincipal().toString().slice(0, 12)}...
+            {ADMIN_EMAIL}
           </span>
+          <Button
+            data-ocid="admin.logout.button"
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setAdminLoggedIn(false)}
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sair
+          </Button>
         </div>
       </header>
 
@@ -356,6 +553,9 @@ export default function AdminPage() {
             <TabsTrigger value="artists" data-ocid="admin.artists.tab">
               Artistas
             </TabsTrigger>
+            <TabsTrigger value="users" data-ocid="admin.users.tab">
+              Ouvintes
+            </TabsTrigger>
             <TabsTrigger value="pacotes" data-ocid="admin.pacotes.tab">
               Pacotes
             </TabsTrigger>
@@ -365,14 +565,14 @@ export default function AdminPage() {
           </TabsList>
 
           {/* OVERVIEW */}
-          <TabsContent value="overview" className="space-y-6">
+          <TabsContent value="overview" className="space-y-4">
             <h2 className="text-lg font-semibold text-foreground">
               Visão Geral da Plataforma
             </h2>
-            {songsQuery.isLoading || artistsQuery.isLoading ? (
+            {isOverviewLoading ? (
               <div
                 className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
-                data-ocid="admin.loading_state"
+                data-ocid="admin.overview.loading_state"
               >
                 {SKELETON_OVERVIEW.map((k) => (
                   <Skeleton key={k} className="h-24 rounded-xl" />
@@ -389,6 +589,11 @@ export default function AdminPage() {
                   icon={Users}
                   label="Total de Artistas"
                   value={artists.length}
+                />
+                <StatCard
+                  icon={Headphones}
+                  label="Ouvintes Registados"
+                  value={ouvintesCount}
                 />
                 <StatCard
                   icon={Heart}
@@ -533,6 +738,10 @@ export default function AdminPage() {
                     ? entry.profile.socialLinks.split("\n").filter(Boolean)
                         .length
                     : 0;
+                  const isBanned = platformUsers.find(
+                    (u) =>
+                      u.displayName === entry.profile.displayName && u.banned,
+                  );
                   return (
                     <Card
                       key={principalStr}
@@ -553,9 +762,19 @@ export default function AdminPage() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-foreground truncate">
-                            {entry.profile.displayName}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-foreground truncate">
+                              {entry.profile.displayName}
+                            </p>
+                            {isBanned && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs border-red-500/30 text-red-400 bg-red-500/10"
+                              >
+                                Banido
+                              </Badge>
+                            )}
+                          </div>
                           {entry.profile.bio && (
                             <p className="text-xs text-muted-foreground truncate">
                               {entry.profile.bio.slice(0, 80)}
@@ -608,6 +827,121 @@ export default function AdminPage() {
             )}
           </TabsContent>
 
+          {/* USERS / OUVINTES */}
+          <TabsContent value="users" className="space-y-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Gestão de Utilizadores
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Músicos e ouvintes registados na plataforma
+                </p>
+              </div>
+              <Input
+                placeholder="Pesquisar por nome..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="w-full sm:w-72 bg-card border-border"
+              />
+            </div>
+
+            {platformUsersQuery.isLoading ? (
+              <div className="space-y-3" data-ocid="admin.users.loading_state">
+                {SKELETON_USERS.map((k) => (
+                  <Skeleton key={k} className="h-16 rounded-lg" />
+                ))}
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div
+                className="text-center py-16 text-muted-foreground"
+                data-ocid="admin.users.empty_state"
+              >
+                Nenhum utilizador registado ainda
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredUsers.map((user, idx) => (
+                  <Card
+                    key={user.emailHash}
+                    className="bg-card border-border"
+                    data-ocid={`admin.users.item.${idx + 1}`}
+                  >
+                    <CardContent className="flex items-center gap-3 p-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+                        {user.role === "ouvinte" ? (
+                          <Headphones className="w-4 h-4 text-primary" />
+                        ) : (
+                          <Music className="w-4 h-4 text-primary" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-foreground text-sm truncate">
+                            {user.displayName || user.emailHash}
+                          </p>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${
+                              user.role === "artista"
+                                ? "border-primary/30 text-primary bg-primary/10"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            {user.role === "artista" ? "Músico" : "Ouvinte"}
+                          </Badge>
+                          {user.banned && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-red-500/30 text-red-400 bg-red-500/10"
+                            >
+                              Banido
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Registado em{" "}
+                          {user.registeredAt
+                            ? formatDate(user.registeredAt)
+                            : "—"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button
+                          data-ocid={`admin.users.toggle.${idx + 1}`}
+                          variant="ghost"
+                          size="sm"
+                          className={`text-xs gap-1.5 ${
+                            user.banned
+                              ? "text-green-400 hover:text-green-400 hover:bg-green-500/10"
+                              : "text-amber-400 hover:text-amber-400 hover:bg-amber-500/10"
+                          }`}
+                          onClick={() => setConfirmBanUser(user)}
+                          disabled={banUserMutation.isPending}
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                          {user.banned ? "Desbanir" : "Banir"}
+                        </Button>
+                        <Button
+                          data-ocid={`admin.users.delete_button.${idx + 1}`}
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() =>
+                            deleteUserMutation.mutate(user.emailHash)
+                          }
+                          disabled={deleteUserMutation.isPending}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
           {/* PACOTES */}
           <TabsContent value="pacotes" className="space-y-6">
             <div>
@@ -642,12 +976,18 @@ export default function AdminPage() {
                         }`}
                       >
                         <Package
-                          className={`w-5 h-5 ${plan.highlight ? "text-primary" : "text-muted-foreground"}`}
+                          className={`w-5 h-5 ${
+                            plan.highlight
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          }`}
                         />
                       </div>
                       <div>
                         <p
-                          className={`font-bold text-base ${plan.highlight ? "text-primary" : "text-foreground"}`}
+                          className={`font-bold text-base ${
+                            plan.highlight ? "text-primary" : "text-foreground"
+                          }`}
                         >
                           {plan.name}
                         </p>
@@ -691,34 +1031,15 @@ export default function AdminPage() {
                 Métodos de Pagamento
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Gerir os métodos de pagamento aceites na plataforma
+                Configura as coordenadas de pagamento para cada método
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[
-                {
-                  key: "kwik" as const,
-                  name: "Kwik",
-                  desc: "Pagamento rápido via app Kwik — carteiras digitais angolanas",
-                  icon: CreditCard,
-                  color: "text-orange-400",
-                },
-                {
-                  key: "unitel" as const,
-                  name: "Unitel Money",
-                  desc: "Transferência via Unitel Money — operadora líder em Angola",
-                  icon: CreditCard,
-                  color: "text-blue-400",
-                },
-                {
-                  key: "express" as const,
-                  name: "Express",
-                  desc: "Pagamento Express — transferência bancária instantânea",
-                  icon: CreditCard,
-                  color: "text-green-400",
-                },
-              ].map((method, idx) => {
+              {paymentMethodsConfig.map((method, idx) => {
                 const active = paymentMethods[method.key];
+                const coords = paymentCoords[method.key];
+                const isEditing = editingCoord === method.key;
+
                 return (
                   <Card
                     key={method.key}
@@ -729,9 +1050,7 @@ export default function AdminPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-muted">
-                            <method.icon
-                              className={`w-5 h-5 ${method.color}`}
-                            />
+                            <CreditCard className={`w-5 h-5 ${method.color}`} />
                           </div>
                           <p className="font-bold text-foreground text-base">
                             {method.name}
@@ -760,9 +1079,119 @@ export default function AdminPage() {
                           </Badge>
                         </button>
                       </div>
+
                       <p className="text-sm text-muted-foreground leading-relaxed">
                         {method.desc}
                       </p>
+
+                      {/* Coordinates section */}
+                      <div className="border-t border-border pt-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            Coordenadas de Pagamento
+                          </p>
+                          {!isEditing ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs gap-1 text-primary hover:text-primary"
+                              onClick={() => startEditCoord(method.key)}
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              Editar
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs gap-1 text-green-400 hover:text-green-400"
+                              onClick={saveCoord}
+                            >
+                              <Save className="w-3 h-3" />
+                              Guardar
+                            </Button>
+                          )}
+                        </div>
+
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              placeholder="Número / IBAN / Referência"
+                              value={coordDraft.number}
+                              onChange={(e) =>
+                                setCoordDraft((d) => ({
+                                  ...d,
+                                  number: e.target.value,
+                                }))
+                              }
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-xs focus:outline-none focus:border-primary placeholder:text-muted-foreground/50"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Nome do titular"
+                              value={coordDraft.name}
+                              onChange={(e) =>
+                                setCoordDraft((d) => ({
+                                  ...d,
+                                  name: e.target.value,
+                                }))
+                              }
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-xs focus:outline-none focus:border-primary placeholder:text-muted-foreground/50"
+                            />
+                            <textarea
+                              placeholder="Instruções adicionais para o cliente"
+                              value={coordDraft.instructions}
+                              onChange={(e) =>
+                                setCoordDraft((d) => ({
+                                  ...d,
+                                  instructions: e.target.value,
+                                }))
+                              }
+                              rows={2}
+                              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-xs focus:outline-none focus:border-primary placeholder:text-muted-foreground/50 resize-none"
+                            />
+                          </div>
+                        ) : coords.number || coords.name ? (
+                          <div className="space-y-1">
+                            {coords.number && (
+                              <div className="flex gap-2">
+                                <span className="text-xs text-muted-foreground w-20 flex-shrink-0">
+                                  Número:
+                                </span>
+                                <span className="text-xs text-foreground font-mono">
+                                  {coords.number}
+                                </span>
+                              </div>
+                            )}
+                            {coords.name && (
+                              <div className="flex gap-2">
+                                <span className="text-xs text-muted-foreground w-20 flex-shrink-0">
+                                  Titular:
+                                </span>
+                                <span className="text-xs text-foreground">
+                                  {coords.name}
+                                </span>
+                              </div>
+                            )}
+                            {coords.instructions && (
+                              <div className="flex gap-2">
+                                <span className="text-xs text-muted-foreground w-20 flex-shrink-0">
+                                  Instruções:
+                                </span>
+                                <span className="text-xs text-foreground">
+                                  {coords.instructions}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground/60 italic">
+                            Nenhuma coordenada configurada. Clica em Editar para
+                            adicionar.
+                          </p>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 );
@@ -795,7 +1224,6 @@ export default function AdminPage() {
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button
-              data-ocid="admin.delete.cancel_button"
               variant="ghost"
               onClick={() => setConfirmDeleteId(null)}
               disabled={deleteMutation.isPending}
@@ -868,7 +1296,6 @@ export default function AdminPage() {
                   </div>
                 </div>
               </div>
-
               {artistToView.profile.bio && (
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase mb-1">
@@ -879,7 +1306,6 @@ export default function AdminPage() {
                   </p>
                 </div>
               )}
-
               {artistToView.profile.socialLinks && (
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">
@@ -909,7 +1335,6 @@ export default function AdminPage() {
           )}
           <DialogFooter>
             <Button
-              data-ocid="admin.artist_view.close_button"
               variant="ghost"
               onClick={() => setViewArtistPrincipal(null)}
             >
@@ -942,7 +1367,6 @@ export default function AdminPage() {
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button
-              data-ocid="admin.artist_delete.cancel_button"
               variant="ghost"
               onClick={() => setConfirmDeleteArtistId(null)}
               disabled={deleteArtistMutation.isPending}
@@ -962,6 +1386,61 @@ export default function AdminPage() {
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
               )}
               Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ban User Dialog */}
+      <Dialog
+        open={!!confirmBanUser}
+        onOpenChange={(open) => !open && setConfirmBanUser(null)}
+      >
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">
+              {confirmBanUser?.banned
+                ? "Desbanir Utilizador"
+                : "Banir Utilizador"}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {confirmBanUser?.banned
+                ? "Queres restaurar o acesso de "
+                : "Queres suspender o acesso de "}
+              <span className="text-foreground font-medium">
+                {confirmBanUser?.displayName || confirmBanUser?.emailHash}
+              </span>
+              ?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmBanUser(null)}
+              disabled={banUserMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant={confirmBanUser?.banned ? "default" : "destructive"}
+              onClick={() =>
+                confirmBanUser &&
+                banUserMutation.mutate({
+                  emailHash: confirmBanUser.emailHash,
+                  banned: !confirmBanUser.banned,
+                })
+              }
+              disabled={banUserMutation.isPending}
+              className={
+                confirmBanUser?.banned ? "bg-green-600 hover:bg-green-700" : ""
+              }
+            >
+              {banUserMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Ban className="w-4 h-4 mr-2" />
+              )}
+              {confirmBanUser?.banned ? "Desbanir" : "Banir"}
             </Button>
           </DialogFooter>
         </DialogContent>

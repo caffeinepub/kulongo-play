@@ -23,11 +23,17 @@ import { motion } from "motion/react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ExternalBlob, ReleaseType, SongGenre } from "../backend";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useUploadSong } from "../hooks/useQueries";
 
+function getCurrentSession() {
+  try {
+    return JSON.parse(localStorage.getItem("kulongo_session") ?? "null");
+  } catch {
+    return null;
+  }
+}
+
 export default function UploadPage() {
-  const { identity, login } = useInternetIdentity();
   const navigate = useNavigate();
   const uploadSong = useUploadSong();
   const audioFileRef = useRef<HTMLInputElement>(null);
@@ -49,6 +55,8 @@ export default function UploadPage() {
   const [coverProgress, setCoverProgress] = useState(0);
   const [isDraggingAudio, setIsDraggingAudio] = useState(false);
   const [isDraggingCover, setIsDraggingCover] = useState(false);
+
+  const session = getCurrentSession();
 
   const handleCoverChange = (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -165,13 +173,14 @@ export default function UploadPage() {
       toast.success("Música carregada com sucesso!");
       navigate({ to: "/" });
     } catch {
-      toast.error("Erro ao carregar a música");
+      toast.error("Erro ao carregar a música. Tenta novamente.");
       setAudioProgress(0);
       setCoverProgress(0);
     }
   };
 
-  if (!identity) {
+  // Only artists can upload
+  if (!session || session.role !== "artista") {
     return (
       <div
         className="flex flex-col items-center justify-center min-h-[60vh] text-center"
@@ -179,18 +188,11 @@ export default function UploadPage() {
       >
         <Music className="w-16 h-16 text-primary/40 mb-4" />
         <h2 className="text-foreground text-xl font-bold mb-2">
-          Faz login para carregar música
+          Apenas artistas podem carregar música
         </h2>
         <p className="text-muted-foreground text-sm mb-6">
-          Partilha a tua música angolana com o mundo
+          Regista-te como artista para partilhar a tua música
         </p>
-        <Button
-          onClick={login}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full"
-          data-ocid="upload.login_button"
-        >
-          Entrar
-        </Button>
       </div>
     );
   }
@@ -211,7 +213,6 @@ export default function UploadPage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Cover art + release type row */}
         <div className="flex gap-4">
-          {/* Cover art upload zone */}
           <div className="flex-shrink-0">
             <Label className="text-foreground mb-1.5 block">
               Capa (opcional)
@@ -270,7 +271,6 @@ export default function UploadPage() {
             </label>
           </div>
 
-          {/* Right column: release type + genre */}
           <div className="flex-1 flex flex-col gap-3 justify-center">
             <div className="space-y-1.5">
               <Label className="text-foreground">Tipo de lançamento *</Label>
