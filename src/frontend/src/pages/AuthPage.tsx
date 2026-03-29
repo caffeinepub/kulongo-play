@@ -8,26 +8,17 @@ type Role = "artista" | "ouvinte";
 
 interface StoredUser {
   email: string;
-  password: string;
   role: Role;
   displayName?: string;
   banned?: boolean;
 }
 
-function getUsers(): StoredUser[] {
-  try {
-    return JSON.parse(localStorage.getItem("kulongo_users") ?? "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveUsers(users: StoredUser[]) {
-  localStorage.setItem("kulongo_users", JSON.stringify(users));
-}
-
 function hashEmail(email: string): string {
   return `u_${btoa(email.toLowerCase().trim()).replace(/=/g, "")}`;
+}
+
+function hashPassword(password: string, email: string): string {
+  return `p_${btoa(password + email.toLowerCase().trim()).replace(/=/g, "")}`;
 }
 
 export function logoutUser() {
@@ -40,6 +31,11 @@ export function getCurrentUser(): StoredUser | null {
   } catch {
     return null;
   }
+}
+
+function saveSession(user: StoredUser) {
+  localStorage.setItem("kulongo_session", JSON.stringify(user));
+  localStorage.setItem("kulongo_user_role", user.role);
 }
 
 export default function AuthPage() {
@@ -61,96 +57,113 @@ export default function AuthPage() {
     setStep("login");
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    setTimeout(() => {
-      const users = getUsers();
+    const emailHash = hashEmail(email);
+    const passwordHash = hashPassword(password, email);
+    const name = displayName || email.split("@")[0];
 
+    try {
       if (isRegister) {
-        // Registo
-        if (users.find((u) => u.email === email)) {
-          setError("Este email já está registado.");
-          setLoading(false);
-          return;
-        }
         if (password.length < 4) {
           setError("A senha deve ter pelo menos 4 caracteres.");
           setLoading(false);
           return;
         }
-        const name = displayName || email.split("@")[0];
-        const newUser: StoredUser = {
-          email,
-          password,
-          role: role!,
-          displayName: name,
-        };
-        users.push(newUser);
-        saveUsers(users);
-        localStorage.setItem("kulongo_session", JSON.stringify(newUser));
 
-        // Sync to backend (fire-and-forget)
         if (actor) {
-          try {
-            (actor as any).registerPlatformUser(hashEmail(email), role!, name);
-          } catch {
-            // silent
-          }
-        }
+          const result = await (actor as any).registerPlatformUserWithPassword(
+            emailHash,
+            passwordHash,
+            role!,
+            name,
+          );
 
-        window.location.reload();
+          if (result && "emailTaken" in result) {
+            setError("Este email já está registado.");
+            setLoading(false);
+            return;
+          }
+
+          // #ok — save session
+          saveSession({ email, role: role!, displayName: name });
+          window.location.reload();
+        } else {
+          // Actor not ready — save locally as fallback
+          saveSession({ email, role: role!, displayName: name });
+          window.location.reload();
+        }
       } else {
         // Login
-        const user = users.find(
-          (u) => u.email === email && u.password === password,
-        );
-        if (!user) {
-          setError("Email ou senha incorretos.");
-          setLoading(false);
-          return;
-        }
-        if (user.banned) {
-          setError("A tua conta foi suspensa. Contacta o suporte.");
-          setLoading(false);
-          return;
-        }
-
-        // Check ban status from backend (fire-and-forget, but we check before continuing)
         if (actor) {
-          (actor as any)
-            .isPlatformUserBanned(hashEmail(email))
-            .then((banned: boolean) => {
-              if (banned) {
-                // Update local state too
-                const updated = users.map((u) =>
-                  u.email === email ? { ...u, banned: true } : u,
-                );
-                saveUsers(updated);
-                setError("A tua conta foi suspensa.");
-                setLoading(false);
-              } else {
-                localStorage.setItem("kulongo_session", JSON.stringify(user));
-                localStorage.setItem("kulongo_user_role", user.role);
-                window.location.reload();
-              }
-            })
-            .catch(() => {
-              // Backend unavailable — fall back to local
-              localStorage.setItem("kulongo_session", JSON.stringify(user));
-              localStorage.setItem("kulongo_user_role", user.role);
-              window.location.reload();
-            });
-          return;
-        }
+          const result = await (actor as any).loginPlatformUser(
+            emailHash,
+            passwordHash,
+          );
 
-        localStorage.setItem("kulongo_session", JSON.stringify(user));
-        localStorage.setItem("kulongo_user_role", user.role);
-        window.location.reload();
+          if (result && "ok" in result) {
+            const { role: backendRole, displayName: backendName } = result.ok;
+            saveSession({
+              email,
+              role: backendRole as Role,
+              displayName: backendName,
+            });
+            window.location.reload();
+          } else if (result && "err" in result) {
+            setError(result.err || "Email ou senha incorretos.");
+            setLoading(false);
+          } else {
+            setError("Erro ao entrar. Tenta novamente.");
+            setLoading(false);
+          }
+        } else {
+          // Actor unavailable — fall back to legacy localStorage check
+          const legacyUsers: Array<{
+            email: string;
+            password: string;
+            role: Role;
+            displayName?: string;
+            banned?: boolean;
+          }> = [];
+          try {
+            const stored = localStorage.getItem("kulongo_users");
+            if (stored) legacyUsers.push(...JSON.parse(stored));
+          } catch {
+            /* ignore */
+          }
+
+          const legacyUser = legacyUsers.find(
+            (u) => u.email === email && u.password === password,
+          );
+
+          if (!legacyUser) {
+            setError("Não foi possível conectar ao servidor. Tenta novamente.");
+            setLoading(false);
+            return;
+          }
+
+          if (legacyUser.banned) {
+            setError("A tua conta foi suspensa. Contacta o suporte.");
+            setLoading(false);
+            return;
+          }
+
+          saveSession({
+            email,
+            role: legacyUser.role,
+            displayName: legacyUser.displayName,
+          });
+          window.location.reload();
+        }
       }
-    }, 500);
+    } catch (err) {
+      console.error("Auth error:", err);
+      setError("Ocorreu um erro. Tenta novamente.");
+      setLoading(false);
+    }
   }
 
   return (
@@ -231,6 +244,7 @@ export default function AuthPage() {
                 type="button"
                 onClick={() => handleRoleSelect("artista")}
                 className="w-full flex items-center gap-4 px-5 py-4 rounded-xl border border-border bg-card text-foreground font-medium hover:border-primary hover:bg-primary/5 transition-all duration-200 group"
+                data-ocid="auth.artista.button"
               >
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <Mic2 className="w-5 h-5 text-primary" />
@@ -247,6 +261,7 @@ export default function AuthPage() {
                 type="button"
                 onClick={() => handleRoleSelect("ouvinte")}
                 className="w-full flex items-center gap-4 px-5 py-4 rounded-xl border border-border bg-card text-foreground font-medium hover:border-primary hover:bg-primary/5 transition-all duration-200 group"
+                data-ocid="auth.ouvinte.button"
               >
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <Headphones className="w-5 h-5 text-primary" />
@@ -291,6 +306,7 @@ export default function AuthPage() {
                       ? "bg-primary text-primary-foreground"
                       : "bg-card text-muted-foreground hover:text-foreground"
                   }`}
+                  data-ocid="auth.login.tab"
                 >
                   Entrar
                 </button>
@@ -305,10 +321,18 @@ export default function AuthPage() {
                       ? "bg-primary text-primary-foreground"
                       : "bg-card text-muted-foreground hover:text-foreground"
                   }`}
+                  data-ocid="auth.register.tab"
                 >
                   Registar
                 </button>
               </div>
+
+              {!actor && (
+                <div className="flex items-center justify-center gap-2 mb-3 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />A conectar ao
+                  servidor...
+                </div>
+              )}
 
               <form onSubmit={handleSubmit} className="space-y-3">
                 {isRegister && role === "artista" && (
@@ -326,6 +350,7 @@ export default function AuthPage() {
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50"
+                      data-ocid="auth.name.input"
                     />
                   </div>
                 )}
@@ -348,6 +373,7 @@ export default function AuthPage() {
                     }}
                     required
                     className="w-full px-4 py-3 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50"
+                    data-ocid="auth.email.input"
                   />
                 </div>
 
@@ -370,6 +396,7 @@ export default function AuthPage() {
                       }}
                       required
                       className="w-full px-4 py-3 pr-11 rounded-xl border border-border bg-card text-foreground text-sm focus:outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/50"
+                      data-ocid="auth.password.input"
                     />
                     <button
                       type="button"
@@ -386,7 +413,10 @@ export default function AuthPage() {
                 </div>
 
                 {error && (
-                  <p className="text-xs text-destructive text-center">
+                  <p
+                    className="text-xs text-destructive text-center"
+                    data-ocid="auth.error_state"
+                  >
                     {error}
                   </p>
                 )}
@@ -399,7 +429,9 @@ export default function AuthPage() {
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {loading
-                    ? "A entrar..."
+                    ? isRegister
+                      ? "A criar conta..."
+                      : "A entrar..."
                     : isRegister
                       ? "Criar Conta"
                       : "Entrar"}
@@ -415,6 +447,7 @@ export default function AuthPage() {
                   setPassword("");
                 }}
                 className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors pt-3"
+                data-ocid="auth.back.button"
               >
                 ← Voltar
               </button>

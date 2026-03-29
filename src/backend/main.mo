@@ -87,12 +87,18 @@ actor {
     profile : UserProfile;
   };
 
+  // Unchanged type — compatible with existing stable data
   type PlatformUserRecord = {
     emailHash : Text;
     role : Text;
     displayName : Text;
     banned : Bool;
     registeredAt : Time.Time;
+  };
+
+  type LoginResult = {
+    #ok : { role : Text; displayName : Text };
+    #err : Text;
   };
 
   // MAPS AND SETS
@@ -102,6 +108,8 @@ actor {
   let userProfiles = Map.empty<Uploader, UserProfile>();
   let profileVisits = Map.empty<Uploader, Nat>();
   let platformUsers = Map.empty<Text, PlatformUserRecord>();
+  // Separate map for passwords — keeps PlatformUserRecord type unchanged (no migration needed)
+  let platformPasswords = Map.empty<Text, Text>(); // emailHash -> passwordHash
 
   let accessControlState = AccessControl.initState();
 
@@ -274,8 +282,45 @@ actor {
   };
 
   // PLATFORM USER MANAGEMENT (email/password based auth)
+
+  // Register with password stored separately (avoids stable type migration)
+  public shared func registerPlatformUserWithPassword(emailHash : Text, passwordHash : Text, role : Text, displayName : Text) : async { #ok; #emailTaken } {
+    if (platformUsers.containsKey(emailHash)) {
+      return #emailTaken;
+    };
+    platformUsers.add(emailHash, {
+      emailHash;
+      role;
+      displayName;
+      banned = false;
+      registeredAt = Time.now();
+    });
+    platformPasswords.add(emailHash, passwordHash);
+    #ok;
+  };
+
+  // Login: verify credentials and return user data
+  public query func loginPlatformUser(emailHash : Text, passwordHash : Text) : async LoginResult {
+    switch (platformUsers.get(emailHash)) {
+      case (null) { #err("Email ou senha incorretos.") };
+      case (?user) {
+        let storedPw = switch (platformPasswords.get(emailHash)) {
+          case (null) { "" };
+          case (?pw) { pw };
+        };
+        if (storedPw != passwordHash) {
+          #err("Email ou senha incorretos.");
+        } else if (user.banned) {
+          #err("A tua conta foi suspensa. Contacta o suporte.");
+        } else {
+          #ok({ role = user.role; displayName = user.displayName });
+        };
+      };
+    };
+  };
+
+  // Legacy register (no password) — kept for backwards compat
   public shared func registerPlatformUser(emailHash : Text, role : Text, displayName : Text) : async () {
-    // Only register if not already exists (don't overwrite)
     if (not platformUsers.containsKey(emailHash)) {
       platformUsers.add(emailHash, {
         emailHash;
@@ -302,6 +347,7 @@ actor {
 
   public shared func deletePlatformUser(emailHash : Text) : async () {
     platformUsers.remove(emailHash);
+    platformPasswords.remove(emailHash);
   };
 
   public query func isPlatformUserBanned(emailHash : Text) : async Bool {

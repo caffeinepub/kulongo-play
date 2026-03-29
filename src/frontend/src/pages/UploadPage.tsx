@@ -96,6 +96,9 @@ export default function UploadPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (uploadSong.isPending) return;
+
     if (
       !title.trim() ||
       !artist.trim() ||
@@ -106,6 +109,7 @@ export default function UploadPage() {
       toast.error("Preenche todos os campos obrigatórios");
       return;
     }
+
     const yearNum = year ? Number.parseInt(year, 10) : null;
     if (
       year &&
@@ -116,64 +120,44 @@ export default function UploadPage() {
       toast.error("Ano inválido");
       return;
     }
+
     try {
-      let coverBlobId: ExternalBlob | null = null;
+      // Read audio file
+      const audioBuffer = await audioFile.arrayBuffer();
+      const audioBlob = ExternalBlob.fromBytes(
+        new Uint8Array(audioBuffer),
+      ).withUploadProgress((pct) => setAudioProgress(pct));
 
+      // Read cover file if provided
+      let coverBlob: ExternalBlob | null = null;
       if (coverFile) {
-        const [audioBuffer, coverBuffer] = await Promise.all([
-          audioFile.arrayBuffer(),
-          coverFile.arrayBuffer(),
-        ]);
-
-        const [audioBlob, coverBlob] = [
-          ExternalBlob.fromBytes(
-            new Uint8Array(audioBuffer),
-          ).withUploadProgress((pct) => setAudioProgress(pct)),
-          ExternalBlob.fromBytes(
-            new Uint8Array(coverBuffer),
-          ).withUploadProgress((pct) => setCoverProgress(pct)),
-        ];
-
-        const songId = `song-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        coverBlobId = coverBlob;
-
-        await uploadSong.mutateAsync({
-          title: title.trim(),
-          artist: artist.trim(),
-          genre: genre as SongGenre,
-          releaseType: releaseType as ReleaseType,
-          songId,
-          audioBlob,
-          coverBlobId,
-          producer: producer.trim() || null,
-          featuring: featuring.trim() || null,
-          year: yearNum,
-        });
-      } else {
-        const audioBuffer = await audioFile.arrayBuffer();
-        const audioBlob = ExternalBlob.fromBytes(
-          new Uint8Array(audioBuffer),
-        ).withUploadProgress((pct) => setAudioProgress(pct));
-        const songId = `song-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-        await uploadSong.mutateAsync({
-          title: title.trim(),
-          artist: artist.trim(),
-          genre: genre as SongGenre,
-          releaseType: releaseType as ReleaseType,
-          songId,
-          audioBlob,
-          coverBlobId: null,
-          producer: producer.trim() || null,
-          featuring: featuring.trim() || null,
-          year: yearNum,
-        });
+        const coverBuffer = await coverFile.arrayBuffer();
+        coverBlob = ExternalBlob.fromBytes(
+          new Uint8Array(coverBuffer),
+        ).withUploadProgress((pct) => setCoverProgress(pct));
       }
+
+      const songId = `song-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      await uploadSong.mutateAsync({
+        title: title.trim(),
+        artist: artist.trim(),
+        genre: genre as SongGenre,
+        releaseType: releaseType as ReleaseType,
+        songId,
+        audioBlob,
+        coverBlobId: coverBlob,
+        producer: producer.trim() || null,
+        featuring: featuring.trim() || null,
+        year: yearNum,
+      });
 
       toast.success("Música carregada com sucesso!");
       navigate({ to: "/" });
-    } catch {
-      toast.error("Erro ao carregar a música. Tenta novamente.");
+    } catch (err) {
+      console.error("Upload error:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Erro ao carregar: ${msg.slice(0, 120)}`);
       setAudioProgress(0);
       setCoverProgress(0);
     }
