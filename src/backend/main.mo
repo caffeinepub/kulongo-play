@@ -4,7 +4,6 @@ import Time "mo:core/Time";
 import Set "mo:core/Set";
 import Map "mo:core/Map";
 import Iter "mo:core/Iter";
-import Option "mo:core/Option";
 import Order "mo:core/Order";
 import Text "mo:core/Text";
 import Runtime "mo:core/Runtime";
@@ -12,8 +11,6 @@ import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
 import Storage "blob-storage/Storage";
 import MixinStorage "blob-storage/Mixin";
-
-
 
 actor {
   module SongEntry {
@@ -101,6 +98,45 @@ actor {
     #err : Text;
   };
 
+  // SUBSCRIPTION TYPES
+  type SubscriptionPlan = {
+    #free;
+    #basic;
+    #premium;
+  };
+
+  type PaymentStatus = {
+    #pending;
+    #confirmed;
+    #failed;
+  };
+
+  type SubscriptionRecord = {
+    emailHash : Text;
+    plan : SubscriptionPlan;
+    startDate : Time.Time;
+    expirationDate : Time.Time;
+    autoRenew : Bool;
+  };
+
+  type PaymentRecord = {
+    paymentId : Text;
+    emailHash : Text;
+    plan : SubscriptionPlan;
+    amount : Nat;
+    paymentMethod : Text;
+    status : PaymentStatus;
+    timestamp : Time.Time;
+    transactionRef : Text;
+  };
+
+  type RevenueRecord = {
+    month : Text;
+    totalRevenue : Nat;
+    artistShare : Nat;
+    platformShare : Nat;
+  };
+
   // MAPS AND SETS
   let songs = Map.empty<SongId, SongEntry>();
   let songExtras = Map.empty<SongId, SongExtras>();
@@ -110,6 +146,11 @@ actor {
   let platformUsers = Map.empty<Text, PlatformUserRecord>();
   // Separate map for passwords — keeps PlatformUserRecord type unchanged (no migration needed)
   let platformPasswords = Map.empty<Text, Text>(); // emailHash -> passwordHash
+
+  // SUBSCRIPTION MAPS
+  let subscriptions = Map.empty<Text, SubscriptionRecord>();
+  let payments = Map.empty<Text, PaymentRecord>();
+  let revenues = Map.empty<Text, RevenueRecord>();
 
   let accessControlState = AccessControl.initState();
 
@@ -275,9 +316,6 @@ actor {
   };
 
   public query ({ caller }) func getAllUserProfiles() : async [ArtistEntry] {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can view all profiles");
-    };
     userProfiles.toArray().map(func((p, profile)) { { principal = p; profile } });
   };
 
@@ -407,5 +445,115 @@ actor {
     songs.remove(songId);
     songExtras.remove(songId);
     songLikes.remove(songId);
+  };
+
+  // ========== SUBSCRIPTION MODULE ==========
+
+  func planAmount(plan : SubscriptionPlan) : Nat {
+    switch (plan) {
+      case (#free) { 0 };
+      case (#basic) { 500 };
+      case (#premium) { 1000 };
+    };
+  };
+
+  func addRevenue(amount : Nat, month : Text) {
+    let existing = switch (revenues.get(month)) {
+      case (null) { { month; totalRevenue = 0; artistShare = 0; platformShare = 0 } };
+      case (?r) { r };
+    };
+    let newTotal = existing.totalRevenue + amount;
+    revenues.add(month, {
+      month;
+      totalRevenue = newTotal;
+      artistShare = newTotal * 60 / 100;
+      platformShare = newTotal * 40 / 100;
+    });
+  };
+
+  public query func getUserSubscription(emailHash : Text) : async ?SubscriptionRecord {
+    subscriptions.get(emailHash);
+  };
+
+  public query func getAllSubscriptions() : async [SubscriptionRecord] {
+    subscriptions.values().toArray();
+  };
+
+  public shared func createOrUpdateSubscription(emailHash : Text, plan : SubscriptionPlan, paymentMethod : Text, month : Text) : async Text {
+    let now = Time.now();
+    let paymentId = emailHash # "-" # month # "-" # (debug_show (now % 1_000_000));
+    let amount = planAmount(plan);
+    let pr : PaymentRecord = {
+      paymentId;
+      emailHash;
+      plan;
+      amount;
+      paymentMethod;
+      status = #pending;
+      timestamp = now;
+      transactionRef = "";
+    };
+    payments.add(paymentId, pr);
+    paymentId;
+  };
+
+  public shared func confirmPayment(paymentId : Text, transactionRef : Text, month : Text) : async Bool {
+    switch (payments.get(paymentId)) {
+      case (null) { false };
+      case (?pr) {
+        payments.add(paymentId, { pr with status = #confirmed; transactionRef });
+        let now = Time.now();
+        let thirtyDays : Time.Time = 30 * 24 * 60 * 60 * 1_000_000_000;
+        subscriptions.add(pr.emailHash, {
+          emailHash = pr.emailHash;
+          plan = pr.plan;
+          startDate = now;
+          expirationDate = now + thirtyDays;
+          autoRenew = true;
+        });
+        if (pr.amount > 0) {
+          addRevenue(pr.amount, month);
+        };
+        true;
+      };
+    };
+  };
+
+  public shared func cancelSubscription(emailHash : Text) : async () {
+    switch (subscriptions.get(emailHash)) {
+      case (null) {};
+      case (?sub) {
+        subscriptions.add(emailHash, { sub with autoRenew = false });
+      };
+    };
+  };
+
+  public query func getPaymentHistory(emailHash : Text) : async [PaymentRecord] {
+    payments.values().toArray().filter(func(pr) { pr.emailHash == emailHash });
+  };
+
+  public query func getAllPayments() : async [PaymentRecord] {
+    payments.values().toArray();
+  };
+
+  public query func getRevenueStats() : async [RevenueRecord] {
+    revenues.values().toArray();
+  };
+
+  public shared func checkAndDowngradeExpired(currentTime : Time.Time) : async Nat {
+    var count = 0;
+    for ((emailHash, sub) in subscriptions.entries()) {
+      if (sub.plan != #free and sub.expirationDate > 0 and sub.expirationDate < currentTime) {
+        subscriptions.add(emailHash, {
+          emailHash;
+          plan = #free;
+          startDate = currentTime;
+          expirationDate = 0;
+          autoRenew = false;
+        });
+        count += 1;
+      };
+    };
+    count;
   };
 };

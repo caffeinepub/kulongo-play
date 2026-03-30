@@ -19,12 +19,20 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
+export const SongId = IDL.Text;
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
-export const SongId = IDL.Text;
+export const Time = IDL.Int;
+export const PlatformUserRecord = IDL.Record({
+  'displayName' : IDL.Text,
+  'role' : IDL.Text,
+  'banned' : IDL.Bool,
+  'emailHash' : IDL.Text,
+  'registeredAt' : Time,
+});
 export const SongTitle = IDL.Text;
 export const ExternalBlob = IDL.Vec(IDL.Nat8);
 export const SongGenre = IDL.Variant({
@@ -39,16 +47,18 @@ export const ReleaseType = IDL.Variant({
   'album' : IDL.Null,
   'single' : IDL.Null,
 });
-export const Time = IDL.Int;
 export const SongMetadata = IDL.Record({
   'title' : SongTitle,
   'likeCount' : IDL.Nat,
   'songId' : SongId,
+  'year' : IDL.Opt(IDL.Nat),
   'coverBlobId' : IDL.Opt(ExternalBlob),
+  'featuring' : IDL.Opt(IDL.Text),
   'genre' : SongGenre,
   'blobId' : ExternalBlob,
   'uploader' : IDL.Principal,
   'artist' : ArtistName,
+  'producer' : IDL.Opt(IDL.Text),
   'releaseType' : ReleaseType,
   'uploadedAt' : Time,
 });
@@ -58,7 +68,15 @@ export const UserProfile = IDL.Record({
   'socialLinks' : IDL.Opt(IDL.Text),
   'coverBlobId' : IDL.Opt(ExternalBlob),
 });
+export const ArtistEntry = IDL.Record({
+  'principal' : IDL.Principal,
+  'profile' : UserProfile,
+});
 export const Uploader = IDL.Principal;
+export const LoginResult = IDL.Variant({
+  'ok' : IDL.Record({ 'displayName' : IDL.Text, 'role' : IDL.Text }),
+  'err' : IDL.Text,
+});
 
 export const idlService = IDL.Service({
   '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -88,12 +106,22 @@ export const idlService = IDL.Service({
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'adminDeleteSong' : IDL.Func([SongId], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'banPlatformUser' : IDL.Func([IDL.Text, IDL.Bool], [], []),
+  'deletePlatformUser' : IDL.Func([IDL.Text], [], []),
   'deleteSong' : IDL.Func([SongId], [], []),
+  'getAllPlatformUsers' : IDL.Func(
+      [],
+      [IDL.Vec(PlatformUserRecord)],
+      ['query'],
+    ),
   'getAllSongIds' : IDL.Func([], [IDL.Vec(SongId)], ['query']),
   'getAllSongs' : IDL.Func([], [IDL.Vec(SongMetadata)], ['query']),
+  'getAllUserProfiles' : IDL.Func([], [IDL.Vec(ArtistEntry)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getProfileVisitCount' : IDL.Func([IDL.Principal], [IDL.Nat], ['query']),
   'getSongLikes' : IDL.Func([SongId], [IDL.Vec(Uploader)], ['query']),
   'getSongMetadata' : IDL.Func([SongId], [IDL.Opt(SongMetadata)], ['query']),
   'getSongsByArtist' : IDL.Func([IDL.Text], [IDL.Vec(SongMetadata)], ['query']),
@@ -111,6 +139,19 @@ export const idlService = IDL.Service({
     ),
   'hasUserLikedSong' : IDL.Func([SongId], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'isPlatformUserBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+  'loginPlatformUser' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [LoginResult],
+      ['query'],
+    ),
+  'recordProfileVisit' : IDL.Func([IDL.Principal], [], []),
+  'registerPlatformUser' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'registerPlatformUserWithPassword' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'emailTaken' : IDL.Null })],
+      [],
+    ),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'searchSongs' : IDL.Func([IDL.Text], [IDL.Vec(SongMetadata)], ['query']),
   'toggleSongLike' : IDL.Func([SongId], [IDL.Bool], []),
@@ -128,6 +169,9 @@ export const idlService = IDL.Service({
         SongId,
         ExternalBlob,
         IDL.Opt(ExternalBlob),
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Nat),
       ],
       [],
       [],
@@ -148,12 +192,20 @@ export const idlFactory = ({ IDL }) => {
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
+  const SongId = IDL.Text;
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
-  const SongId = IDL.Text;
+  const Time = IDL.Int;
+  const PlatformUserRecord = IDL.Record({
+    'displayName' : IDL.Text,
+    'role' : IDL.Text,
+    'banned' : IDL.Bool,
+    'emailHash' : IDL.Text,
+    'registeredAt' : Time,
+  });
   const SongTitle = IDL.Text;
   const ExternalBlob = IDL.Vec(IDL.Nat8);
   const SongGenre = IDL.Variant({
@@ -168,16 +220,18 @@ export const idlFactory = ({ IDL }) => {
     'album' : IDL.Null,
     'single' : IDL.Null,
   });
-  const Time = IDL.Int;
   const SongMetadata = IDL.Record({
     'title' : SongTitle,
     'likeCount' : IDL.Nat,
     'songId' : SongId,
+    'year' : IDL.Opt(IDL.Nat),
     'coverBlobId' : IDL.Opt(ExternalBlob),
+    'featuring' : IDL.Opt(IDL.Text),
     'genre' : SongGenre,
     'blobId' : ExternalBlob,
     'uploader' : IDL.Principal,
     'artist' : ArtistName,
+    'producer' : IDL.Opt(IDL.Text),
     'releaseType' : ReleaseType,
     'uploadedAt' : Time,
   });
@@ -187,7 +241,15 @@ export const idlFactory = ({ IDL }) => {
     'socialLinks' : IDL.Opt(IDL.Text),
     'coverBlobId' : IDL.Opt(ExternalBlob),
   });
+  const ArtistEntry = IDL.Record({
+    'principal' : IDL.Principal,
+    'profile' : UserProfile,
+  });
   const Uploader = IDL.Principal;
+  const LoginResult = IDL.Variant({
+    'ok' : IDL.Record({ 'displayName' : IDL.Text, 'role' : IDL.Text }),
+    'err' : IDL.Text,
+  });
   
   return IDL.Service({
     '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -217,12 +279,22 @@ export const idlFactory = ({ IDL }) => {
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'adminDeleteSong' : IDL.Func([SongId], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'banPlatformUser' : IDL.Func([IDL.Text, IDL.Bool], [], []),
+    'deletePlatformUser' : IDL.Func([IDL.Text], [], []),
     'deleteSong' : IDL.Func([SongId], [], []),
+    'getAllPlatformUsers' : IDL.Func(
+        [],
+        [IDL.Vec(PlatformUserRecord)],
+        ['query'],
+      ),
     'getAllSongIds' : IDL.Func([], [IDL.Vec(SongId)], ['query']),
     'getAllSongs' : IDL.Func([], [IDL.Vec(SongMetadata)], ['query']),
+    'getAllUserProfiles' : IDL.Func([], [IDL.Vec(ArtistEntry)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getProfileVisitCount' : IDL.Func([IDL.Principal], [IDL.Nat], ['query']),
     'getSongLikes' : IDL.Func([SongId], [IDL.Vec(Uploader)], ['query']),
     'getSongMetadata' : IDL.Func([SongId], [IDL.Opt(SongMetadata)], ['query']),
     'getSongsByArtist' : IDL.Func(
@@ -248,6 +320,19 @@ export const idlFactory = ({ IDL }) => {
       ),
     'hasUserLikedSong' : IDL.Func([SongId], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'isPlatformUserBanned' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'loginPlatformUser' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [LoginResult],
+        ['query'],
+      ),
+    'recordProfileVisit' : IDL.Func([IDL.Principal], [], []),
+    'registerPlatformUser' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+    'registerPlatformUserWithPassword' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'emailTaken' : IDL.Null })],
+        [],
+      ),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'searchSongs' : IDL.Func([IDL.Text], [IDL.Vec(SongMetadata)], ['query']),
     'toggleSongLike' : IDL.Func([SongId], [IDL.Bool], []),
@@ -265,6 +350,9 @@ export const idlFactory = ({ IDL }) => {
           SongId,
           ExternalBlob,
           IDL.Opt(ExternalBlob),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Nat),
         ],
         [],
         [],

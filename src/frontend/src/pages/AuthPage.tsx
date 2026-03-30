@@ -1,6 +1,7 @@
 import { Eye, EyeOff, Headphones, Loader2, Mic2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
+import { Variant_ok_emailTaken } from "../backend";
 import { useActor } from "../hooks/useActor";
 
 type Step = "choose" | "login" | "register";
@@ -75,14 +76,14 @@ export default function AuthPage() {
         }
 
         if (actor) {
-          const result = await (actor as any).registerPlatformUserWithPassword(
+          const result = await actor.registerPlatformUserWithPassword(
             emailHash,
             passwordHash,
             role!,
             name,
           );
 
-          if (result && "emailTaken" in result) {
+          if (result === Variant_ok_emailTaken.emailTaken) {
             setError("Este email já está registado.");
             setLoading(false);
             return;
@@ -99,10 +100,7 @@ export default function AuthPage() {
       } else {
         // Login
         if (actor) {
-          const result = await (actor as any).loginPlatformUser(
-            emailHash,
-            passwordHash,
-          );
+          const result = await actor.loginPlatformUser(emailHash, passwordHash);
 
           if (result && "ok" in result) {
             const { role: backendRole, displayName: backendName } = result.ok;

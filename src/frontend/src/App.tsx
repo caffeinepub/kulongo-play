@@ -23,6 +23,7 @@ import HomePage from "./pages/HomePage";
 import PlaylistPage from "./pages/PlaylistPage";
 import ProfilePage from "./pages/ProfilePage";
 import SearchPage from "./pages/SearchPage";
+import SubscriptionPage from "./pages/SubscriptionPage";
 import UploadPage from "./pages/UploadPage";
 
 const queryClient = new QueryClient({
@@ -137,6 +138,12 @@ const playlistRoute = createRoute({
   component: PlaylistPage,
 });
 
+const subscriptionRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/subscription",
+  component: SubscriptionPage,
+});
+
 const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     homeRoute,
@@ -145,6 +152,7 @@ const routeTree = rootRoute.addChildren([
     profileRoute,
     artistRoute,
     playlistRoute,
+    subscriptionRoute,
   ]),
   adminRoute,
 ]);

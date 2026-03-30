@@ -12,6 +12,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -27,7 +35,6 @@ import {
   Loader2,
   LogOut,
   Music,
-  Package,
   Save,
   Shield,
   Trash2,
@@ -109,52 +116,6 @@ const SKELETON_SONGS = ["a", "b", "c", "d", "e"];
 const SKELETON_ARTISTS = ["a", "b", "c", "d"];
 const SKELETON_USERS = ["a", "b", "c", "d"];
 
-const PLANS = [
-  {
-    id: "free",
-    name: "Free",
-    price: "0 Kz/mês",
-    highlight: false,
-    features: ["Ouvir músicas", "Playlists básicas", "Qualidade padrão"],
-  },
-  {
-    id: "bronze",
-    name: "Bronze",
-    price: "500 Kz/mês",
-    highlight: false,
-    features: [
-      "Tudo do Free",
-      "Sem anúncios",
-      "Downloads offline (20)",
-      "Qualidade HD",
-    ],
-  },
-  {
-    id: "prata",
-    name: "Prata",
-    price: "1.500 Kz/mês",
-    highlight: true,
-    features: [
-      "Tudo do Bronze",
-      "Downloads ilimitados",
-      "Qualidade Ultra HD",
-      "Perfil personalizado",
-    ],
-  },
-  {
-    id: "ouro",
-    name: "Ouro",
-    price: "3.000 Kz/mês",
-    highlight: false,
-    features: [
-      "Tudo do Prata",
-      "Acesso antecipado",
-      "Suporte prioritário",
-      "Conteúdo exclusivo",
-    ],
-  },
-];
-
 const PAYMENT_INITIAL = { kwik: true, unitel: true, express: true };
 
 function StatCard({
@@ -192,6 +153,329 @@ function parseSocialLinks(
       const [label, ...rest] = line.split(":");
       return { label: label.trim(), url: rest.join(":").trim() };
     });
+}
+
+function AdminSubscriptionsTab() {
+  const { actor, isFetching } = useActor();
+  const qc = useQueryClient();
+  const [confirmRefs, setConfirmRefs] = useState<Record<string, string>>({});
+
+  const { data: allSubs, isLoading: subsLoading } = useQuery({
+    queryKey: ["admin_subscriptions"],
+    queryFn: async () => {
+      if (!actor) return [];
+      try {
+        const r = await (actor as any).getAllSubscriptions();
+        return Array.isArray(r) ? r : [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!actor && !isFetching,
+  });
+
+  const { data: allPayments, isLoading: paymentsLoading } = useQuery({
+    queryKey: ["admin_payments"],
+    queryFn: async () => {
+      if (!actor) return [];
+      try {
+        const r = await (actor as any).getAllPayments();
+        return Array.isArray(r) ? r : [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!actor && !isFetching,
+  });
+
+  const { data: revenueStats } = useQuery({
+    queryKey: ["admin_revenue"],
+    queryFn: async () => {
+      if (!actor) return [];
+      try {
+        const r = await (actor as any).getRevenueStats();
+        return Array.isArray(r) ? r : [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!actor && !isFetching,
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async ({
+      paymentId,
+      txRef,
+    }: { paymentId: string; txRef: string }) => {
+      if (!actor) throw new Error("Sem ator");
+      const month = new Date().toISOString().slice(0, 7);
+      await (actor as any).confirmPayment(paymentId, txRef, month);
+    },
+    onSuccess: () => {
+      toast.success("Pagamento confirmado!");
+      qc.invalidateQueries({ queryKey: ["admin_payments"] });
+      qc.invalidateQueries({ queryKey: ["admin_subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["admin_revenue"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Erro ao confirmar"),
+  });
+
+  const totalRevenue = (revenueStats ?? []).reduce(
+    (acc: number, r: any) => acc + Number(r.totalRevenue ?? 0),
+    0,
+  );
+  const artistShare = (revenueStats ?? []).reduce(
+    (acc: number, r: any) => acc + Number(r.artistShare ?? 0),
+    0,
+  );
+  const platformShare = (revenueStats ?? []).reduce(
+    (acc: number, r: any) => acc + Number(r.platformShare ?? 0),
+    0,
+  );
+
+  const totalSubs = (allSubs ?? []).length;
+  const basicSubs = (allSubs ?? []).filter(
+    (s: any) => s.plan?.__kind__ === "basic",
+  ).length;
+  const premiumSubs = (allSubs ?? []).filter(
+    (s: any) => s.plan?.__kind__ === "premium",
+  ).length;
+  const pendingPayments = (allPayments ?? []).filter(
+    (p: any) => p.status?.__kind__ === "pending",
+  );
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold text-foreground">
+        Gestão de Assinaturas
+      </h2>
+
+      {/* Revenue stats */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <Card className="bg-card border-border">
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              Receita Total
+            </p>
+            <p className="text-2xl font-bold text-foreground mt-1">
+              {totalRevenue.toLocaleString("pt-PT")} Kz
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card border-green-500/20">
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              Artistas (60%)
+            </p>
+            <p className="text-2xl font-bold text-green-400 mt-1">
+              {artistShare.toLocaleString("pt-PT")} Kz
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card border-primary/20">
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              Plataforma (40%)
+            </p>
+            <p className="text-2xl font-bold text-primary mt-1">
+              {platformShare.toLocaleString("pt-PT")} Kz
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card border-border">
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              Total Assinantes
+            </p>
+            <p className="text-2xl font-bold text-foreground mt-1">
+              {totalSubs}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card border-border">
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              Plano Básico
+            </p>
+            <p className="text-2xl font-bold text-foreground mt-1">
+              {basicSubs}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card border-border">
+          <CardContent className="pt-5">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              Plano Premium
+            </p>
+            <p className="text-2xl font-bold text-primary mt-1">
+              {premiumSubs}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Pending payments */}
+      <div className="space-y-3">
+        <h3 className="font-semibold text-foreground flex items-center gap-2">
+          <CreditCard className="w-4 h-4 text-primary" />
+          Pagamentos Pendentes ({pendingPayments.length})
+        </h3>
+        {paymentsLoading ? (
+          <div
+            className="flex items-center gap-2 py-3"
+            data-ocid="admin.assinaturas.payments.loading_state"
+          >
+            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">A carregar...</span>
+          </div>
+        ) : pendingPayments.length === 0 ? (
+          <Card>
+            <CardContent
+              className="py-6 text-center text-muted-foreground text-sm"
+              data-ocid="admin.assinaturas.payments.empty_state"
+            >
+              Sem pagamentos pendentes
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2" data-ocid="admin.assinaturas.pending.list">
+            {pendingPayments.map((p: any, i: number) => (
+              <Card
+                key={p.paymentId ?? i}
+                className="border-yellow-500/20"
+                data-ocid={`admin.assinaturas.payment.item.${i + 1}`}
+              >
+                <CardContent className="py-4 flex flex-wrap items-center gap-4">
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <p className="text-sm font-mono text-muted-foreground truncate">
+                      {p.emailHash}
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="capitalize text-xs">
+                        {p.plan?.__kind__ === "premium" ? "Premium" : "Básico"}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {p.paymentMethod}
+                      </span>
+                      <span className="text-xs font-medium text-foreground">
+                        {Number(p.amount ?? 0).toLocaleString("pt-PT")} Kz
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Ref. transação"
+                      className="h-8 text-sm w-40"
+                      value={confirmRefs[p.paymentId] ?? ""}
+                      onChange={(e) =>
+                        setConfirmRefs((prev) => ({
+                          ...prev,
+                          [p.paymentId]: e.target.value,
+                        }))
+                      }
+                      data-ocid={`admin.assinaturas.txref.input.${i + 1}`}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8"
+                      onClick={() =>
+                        confirmPaymentMutation.mutate({
+                          paymentId: p.paymentId,
+                          txRef: confirmRefs[p.paymentId] ?? "",
+                        })
+                      }
+                      disabled={
+                        confirmPaymentMutation.isPending ||
+                        !confirmRefs[p.paymentId]?.trim()
+                      }
+                      data-ocid={`admin.assinaturas.confirm_button.${i + 1}`}
+                    >
+                      {confirmPaymentMutation.isPending ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Check className="w-3 h-3" />
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* All subscriptions */}
+      <div className="space-y-3">
+        <h3 className="font-semibold text-foreground">Todas as Assinaturas</h3>
+        {subsLoading ? (
+          <div
+            className="flex items-center gap-2 py-3"
+            data-ocid="admin.assinaturas.subs.loading_state"
+          >
+            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">A carregar...</span>
+          </div>
+        ) : !(allSubs ?? []).length ? (
+          <Card>
+            <CardContent
+              className="py-6 text-center text-muted-foreground text-sm"
+              data-ocid="admin.assinaturas.subs.empty_state"
+            >
+              Sem assinaturas registadas
+            </CardContent>
+          </Card>
+        ) : (
+          <Card data-ocid="admin.assinaturas.subs.table">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Utilizador</TableHead>
+                  <TableHead>Plano</TableHead>
+                  <TableHead>Expiração</TableHead>
+                  <TableHead>Auto-renovação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(allSubs ?? []).map((s: any, i: number) => (
+                  <TableRow
+                    key={s.emailHash ?? i}
+                    data-ocid={`admin.assinaturas.subs.item.${i + 1}`}
+                  >
+                    <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[160px]">
+                      {s.emailHash}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="capitalize">
+                        {s.plan?.__kind__ === "premium"
+                          ? "Premium"
+                          : s.plan?.__kind__ === "basic"
+                            ? "Básico"
+                            : "Gratuito"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatDate(s.expirationDate ?? 0n)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        className={
+                          s.autoRenew
+                            ? "bg-green-500/20 text-green-400 border-green-500/30"
+                            : "bg-muted text-muted-foreground"
+                        }
+                      >
+                        {s.autoRenew ? "Sim" : "Não"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function AdminPage() {
@@ -251,9 +535,7 @@ export default function AdminPage() {
     queryKey: ["admin", "platformUsers"],
     queryFn: async () => {
       if (!actor) return [];
-      return (actor as any).getAllPlatformUsers() as Promise<
-        PlatformUserRecord[]
-      >;
+      return actor.getAllPlatformUsers() as Promise<PlatformUserRecord[]>;
     },
     enabled: !!actor && !actorFetching && adminLoggedIn,
   });
@@ -261,7 +543,7 @@ export default function AdminPage() {
   const deleteMutation = useMutation({
     mutationFn: async (songId: string) => {
       if (!actor) throw new Error("No actor");
-      return (actor as any).adminDeleteSong(songId);
+      return actor.adminDeleteSong(songId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "songs"] });
@@ -272,12 +554,8 @@ export default function AdminPage() {
   });
 
   const deleteArtistMutation = useMutation({
-    mutationFn: async (principal: string) => {
-      if (!actor) throw new Error("No actor");
-      if (typeof (actor as any).adminDeleteArtist !== "function") {
-        throw new Error("NOT_IMPLEMENTED");
-      }
-      return (actor as any).adminDeleteArtist(principal);
+    mutationFn: async (_principal: string) => {
+      throw new Error("NOT_IMPLEMENTED");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "artists"] });
@@ -300,7 +578,8 @@ export default function AdminPage() {
       emailHash: string;
       banned: boolean;
     }) => {
-      return (actor as any).banPlatformUser(emailHash, banned);
+      if (!actor) throw new Error("No actor");
+      return actor.banPlatformUser(emailHash, banned);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "platformUsers"] });
@@ -315,7 +594,8 @@ export default function AdminPage() {
 
   const deleteUserMutation = useMutation({
     mutationFn: async (emailHash: string) => {
-      return (actor as any).deletePlatformUser(emailHash);
+      if (!actor) throw new Error("No actor");
+      return actor.deletePlatformUser(emailHash);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "platformUsers"] });
@@ -556,11 +836,11 @@ export default function AdminPage() {
             <TabsTrigger value="users" data-ocid="admin.users.tab">
               Ouvintes
             </TabsTrigger>
-            <TabsTrigger value="pacotes" data-ocid="admin.pacotes.tab">
-              Pacotes
-            </TabsTrigger>
             <TabsTrigger value="pagamentos" data-ocid="admin.pagamentos.tab">
               Pagamentos
+            </TabsTrigger>
+            <TabsTrigger value="assinaturas" data-ocid="admin.assinaturas.tab">
+              Assinaturas
             </TabsTrigger>
           </TabsList>
 
@@ -942,88 +1222,6 @@ export default function AdminPage() {
             )}
           </TabsContent>
 
-          {/* PACOTES */}
-          <TabsContent value="pacotes" className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                Pacotes de Subscrição
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Gerir os planos disponíveis na plataforma
-              </p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {PLANS.map((plan, idx) => (
-                <Card
-                  key={plan.id}
-                  className={`bg-card relative flex flex-col ${
-                    plan.highlight ? "border-primary border-2" : "border-border"
-                  }`}
-                  data-ocid={`admin.pacotes.item.${idx + 1}`}
-                >
-                  {plan.highlight && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="bg-primary text-primary-foreground text-xs px-3">
-                        Recomendado
-                      </Badge>
-                    </div>
-                  )}
-                  <CardContent className="flex flex-col gap-4 p-5 flex-1">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                          plan.highlight ? "bg-primary/20" : "bg-muted"
-                        }`}
-                      >
-                        <Package
-                          className={`w-5 h-5 ${
-                            plan.highlight
-                              ? "text-primary"
-                              : "text-muted-foreground"
-                          }`}
-                        />
-                      </div>
-                      <div>
-                        <p
-                          className={`font-bold text-base ${
-                            plan.highlight ? "text-primary" : "text-foreground"
-                          }`}
-                        >
-                          {plan.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {plan.price}
-                        </p>
-                      </div>
-                    </div>
-                    <ul className="space-y-2 flex-1">
-                      {plan.features.map((feat) => (
-                        <li
-                          key={feat}
-                          className="flex items-start gap-2 text-sm text-muted-foreground"
-                        >
-                          <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                          <span>{feat}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <Button
-                      data-ocid={`admin.pacotes.button.${idx + 1}`}
-                      size="sm"
-                      className={
-                        plan.highlight
-                          ? "bg-primary text-primary-foreground hover:bg-primary/90 w-full"
-                          : "w-full bg-muted text-foreground hover:bg-muted/80"
-                      }
-                    >
-                      Escolher Plano
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
           {/* PAGAMENTOS */}
           <TabsContent value="pagamentos" className="space-y-6">
             <div>
@@ -1197,6 +1395,11 @@ export default function AdminPage() {
                 );
               })}
             </div>
+          </TabsContent>
+
+          {/* ASSINATURAS */}
+          <TabsContent value="assinaturas" className="space-y-6">
+            <AdminSubscriptionsTab />
           </TabsContent>
         </Tabs>
       </div>

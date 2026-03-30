@@ -10,8 +10,23 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface ArtistEntry {
+  'principal' : Principal,
+  'profile' : UserProfile,
+}
 export type ArtistName = string;
 export type ExternalBlob = Uint8Array;
+export type LoginResult = {
+    'ok' : { 'displayName' : string, 'role' : string }
+  } |
+  { 'err' : string };
+export interface PlatformUserRecord {
+  'displayName' : string,
+  'role' : string,
+  'banned' : boolean,
+  'emailHash' : string,
+  'registeredAt' : Time,
+}
 export type ReleaseType = { 'ep' : null } |
   { 'album' : null } |
   { 'single' : null };
@@ -24,16 +39,16 @@ export interface SongMetadata {
   'title' : SongTitle,
   'likeCount' : bigint,
   'songId' : SongId,
+  'year' : [] | [bigint],
   'coverBlobId' : [] | [ExternalBlob],
+  'featuring' : [] | [string],
   'genre' : SongGenre,
   'blobId' : ExternalBlob,
   'uploader' : Principal,
   'artist' : ArtistName,
+  'producer' : [] | [string],
   'releaseType' : ReleaseType,
   'uploadedAt' : Time,
-  'producer' : [] | [string],
-  'featuring' : [] | [string],
-  'year' : [] | [bigint],
 }
 export type SongTitle = string;
 export type Time = bigint;
@@ -75,12 +90,18 @@ export interface _SERVICE {
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'adminDeleteSong' : ActorMethod<[SongId], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'banPlatformUser' : ActorMethod<[string, boolean], undefined>,
+  'deletePlatformUser' : ActorMethod<[string], undefined>,
   'deleteSong' : ActorMethod<[SongId], undefined>,
+  'getAllPlatformUsers' : ActorMethod<[], Array<PlatformUserRecord>>,
   'getAllSongIds' : ActorMethod<[], Array<SongId>>,
   'getAllSongs' : ActorMethod<[], Array<SongMetadata>>,
+  'getAllUserProfiles' : ActorMethod<[], Array<ArtistEntry>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getProfileVisitCount' : ActorMethod<[Principal], bigint>,
   'getSongLikes' : ActorMethod<[SongId], Array<Uploader>>,
   'getSongMetadata' : ActorMethod<[SongId], [] | [SongMetadata]>,
   'getSongsByArtist' : ActorMethod<[string], Array<SongMetadata>>,
@@ -90,6 +111,15 @@ export interface _SERVICE {
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'hasUserLikedSong' : ActorMethod<[SongId], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'isPlatformUserBanned' : ActorMethod<[string], boolean>,
+  'loginPlatformUser' : ActorMethod<[string, string], LoginResult>,
+  'recordProfileVisit' : ActorMethod<[Principal], undefined>,
+  'registerPlatformUser' : ActorMethod<[string, string, string], undefined>,
+  'registerPlatformUserWithPassword' : ActorMethod<
+    [string, string, string, string],
+    { 'ok' : null } |
+      { 'emailTaken' : null }
+  >,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'searchSongs' : ActorMethod<[string], Array<SongMetadata>>,
   'toggleSongLike' : ActorMethod<[SongId], boolean>,

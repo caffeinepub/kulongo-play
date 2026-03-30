@@ -1,12 +1,18 @@
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, Music, Search, Upload, User } from "lucide-react";
+import { CreditCard, Home, Music, Search, Upload, User } from "lucide-react";
 
 const ALL_NAV_ITEMS = [
   { to: "/", icon: Home, label: "Início", artistOnly: false },
   { to: "/search", icon: Search, label: "Pesquisar", artistOnly: false },
   { to: "/upload", icon: Upload, label: "Carregar", artistOnly: true },
   { to: "/profile", icon: User, label: "Perfil", artistOnly: false },
+  {
+    to: "/subscription",
+    icon: CreditCard,
+    label: "Assinatura",
+    artistOnly: false,
+  },
 ];
 
 export default function Sidebar() {
