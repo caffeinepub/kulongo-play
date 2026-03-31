@@ -16,6 +16,8 @@ interface PlayerContextValue {
   currentTime: number;
   duration: number;
   volume: number;
+  shuffle: boolean;
+  repeat: boolean;
   play: (songs: SongMetadata[], index?: number) => void;
   pause: () => void;
   resume: () => void;
@@ -23,6 +25,8 @@ interface PlayerContextValue {
   prev: () => void;
   seek: (time: number) => void;
   setVolume: (vol: number) => void;
+  toggleShuffle: () => void;
+  toggleRepeat: () => void;
   currentSong: SongMetadata | null;
 }
 
@@ -35,9 +39,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(0.8);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const queueRef = useRef<SongMetadata[]>(queue);
   const isPlayingRef = useRef(isPlaying);
+  const shuffleRef = useRef(shuffle);
+  const repeatRef = useRef(repeat);
+  const currentIndexRef = useRef(currentIndex);
 
   useEffect(() => {
     queueRef.current = queue;
@@ -45,6 +54,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+  useEffect(() => {
+    shuffleRef.current = shuffle;
+  }, [shuffle]);
+  useEffect(() => {
+    repeatRef.current = repeat;
+  }, [repeat]);
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
   useEffect(() => {
     const audio = new Audio();
@@ -53,6 +71,27 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onTimeUpdate = () => setCurrentTime(audio.currentTime);
     const onDurationChange = () => setDuration(audio.duration || 0);
     const onEnded = () => {
+      if (repeatRef.current) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+        return;
+      }
+      if (shuffleRef.current && queueRef.current.length > 1) {
+        const current = currentIndexRef.current;
+        let randIdx: number;
+        do {
+          randIdx = Math.floor(Math.random() * queueRef.current.length);
+        } while (randIdx === current);
+        setCurrentIndex(randIdx);
+        const url = queueRef.current[randIdx]?.blobId.getDirectURL();
+        if (url) {
+          audio.src = url;
+          audio.load();
+          audio.play().catch(() => {});
+          setIsPlaying(true);
+        }
+        return;
+      }
       setCurrentIndex((prev) => {
         const next = prev + 1;
         return next < queueRef.current.length ? next : prev;
@@ -110,6 +149,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const next = useCallback(() => {
+    if (shuffleRef.current && queueRef.current.length > 1) {
+      const current = currentIndexRef.current;
+      let randIdx: number;
+      do {
+        randIdx = Math.floor(Math.random() * queueRef.current.length);
+      } while (randIdx === current);
+      setCurrentIndex(randIdx);
+      const audio = audioRef.current;
+      const url = queueRef.current[randIdx]?.blobId.getDirectURL();
+      if (audio && url) {
+        audio.src = url;
+        audio.load();
+        audio.play().catch(() => {});
+        setIsPlaying(true);
+      }
+      return;
+    }
     setCurrentIndex((prev) => {
       const nextIdx = Math.min(prev + 1, queueRef.current.length - 1);
       const audio = audioRef.current;
@@ -152,6 +208,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (audioRef.current) audioRef.current.volume = vol;
   }, []);
 
+  const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
+  const toggleRepeat = useCallback(() => setRepeat((r) => !r), []);
+
   return (
     <PlayerContext.Provider
       value={{
@@ -161,6 +220,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         currentTime,
         duration,
         volume,
+        shuffle,
+        repeat,
         play,
         pause,
         resume,
@@ -168,6 +229,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         prev,
         seek,
         setVolume,
+        toggleShuffle,
+        toggleRepeat,
         currentSong,
       }}
     >

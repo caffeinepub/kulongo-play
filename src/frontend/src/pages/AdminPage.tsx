@@ -65,13 +65,11 @@ interface PlatformUserRecord {
 interface PaymentCoords {
   kwik: { number: string; name: string; instructions: string };
   unitel: { number: string; name: string; instructions: string };
-  express: { number: string; name: string; instructions: string };
 }
 
 const DEFAULT_COORDS: PaymentCoords = {
   kwik: { number: "", name: "", instructions: "" },
   unitel: { number: "", name: "", instructions: "" },
-  express: { number: "", name: "", instructions: "" },
 };
 
 function loadPaymentCoords(): PaymentCoords {
@@ -116,7 +114,7 @@ const SKELETON_SONGS = ["a", "b", "c", "d", "e"];
 const SKELETON_ARTISTS = ["a", "b", "c", "d"];
 const SKELETON_USERS = ["a", "b", "c", "d"];
 
-const PAYMENT_INITIAL = { kwik: true, unitel: true, express: true };
+const PAYMENT_INITIAL = { kwik: true, unitel: true };
 
 function StatCard({
   icon: Icon,
@@ -771,12 +769,6 @@ export default function AdminPage() {
       name: "Unitel Money",
       desc: "Transferência via Unitel Money — operadora líder em Angola",
       color: "text-blue-400",
-    },
-    {
-      key: "express" as const,
-      name: "Express",
-      desc: "Pagamento Express — transferência bancária instantânea",
-      color: "text-green-400",
     },
   ];
 

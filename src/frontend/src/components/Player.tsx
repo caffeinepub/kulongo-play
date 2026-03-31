@@ -6,6 +6,8 @@ import {
   Music,
   Pause,
   Play,
+  Repeat,
+  Shuffle,
   SkipBack,
   SkipForward,
   Volume2,
@@ -38,12 +40,16 @@ export default function Player() {
     currentTime,
     duration,
     volume,
+    shuffle,
+    repeat,
     pause,
     resume,
     next,
     prev,
     seek,
     setVolume,
+    toggleShuffle,
+    toggleRepeat,
   } = usePlayer();
 
   const { identity } = useInternetIdentity();
@@ -199,8 +205,20 @@ export default function Player() {
                 </div>
               </div>
 
-              {/* Playback controls */}
-              <div className="flex items-center justify-center gap-8 mb-6">
+              {/* Playback controls: [Shuffle] [Prev] [Play] [Next] [Repeat] */}
+              <div className="flex items-center justify-center gap-6 mb-6">
+                <button
+                  type="button"
+                  onClick={toggleShuffle}
+                  className={`transition-colors active:scale-90 ${
+                    shuffle ? "text-primary" : "text-white/50 hover:text-white"
+                  }`}
+                  data-ocid="player.shuffle.toggle"
+                  title="Aleatório"
+                >
+                  <Shuffle className="w-7 h-7" />
+                </button>
+
                 <button
                   type="button"
                   onClick={prev}
@@ -230,6 +248,18 @@ export default function Player() {
                   data-ocid="player.next_button"
                 >
                   <SkipForward className="w-7 h-7" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleRepeat}
+                  className={`transition-colors active:scale-90 ${
+                    repeat ? "text-primary" : "text-white/50 hover:text-white"
+                  }`}
+                  data-ocid="player.repeat.toggle"
+                  title="Repetir"
+                >
+                  <Repeat className="w-7 h-7" />
                 </button>
               </div>
 
@@ -312,7 +342,22 @@ export default function Player() {
 
                 {/* Center controls */}
                 <div className="flex flex-col items-center gap-1.5">
-                  <div className="flex items-center gap-3 sm:gap-5">
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    {/* Shuffle - hidden on mobile */}
+                    <button
+                      type="button"
+                      onClick={toggleShuffle}
+                      className={`hidden sm:block transition-colors active:scale-90 ${
+                        shuffle
+                          ? "text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      data-ocid="player.shuffle.toggle"
+                      title="Aleatório"
+                    >
+                      <Shuffle className="w-5 h-5" />
+                    </button>
+
                     <button
                       type="button"
                       onClick={handleLike}
@@ -354,6 +399,21 @@ export default function Player() {
                       className="text-muted-foreground hover:text-foreground transition-colors active:scale-90"
                     >
                       <SkipForward className="w-5 h-5" />
+                    </button>
+
+                    {/* Repeat - hidden on mobile */}
+                    <button
+                      type="button"
+                      onClick={toggleRepeat}
+                      className={`hidden sm:block transition-colors active:scale-90 ${
+                        repeat
+                          ? "text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      data-ocid="player.repeat.toggle"
+                      title="Repetir"
+                    >
+                      <Repeat className="w-5 h-5" />
                     </button>
 
                     <div className="hidden md:flex items-center gap-2 w-24">

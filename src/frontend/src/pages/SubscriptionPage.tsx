@@ -210,12 +210,9 @@ export default function SubscriptionPage() {
   const payCoords =
     payMethod === "unitel"
       ? (coords.unitel ?? {})
-      : {
-          number: "",
-          name: "Africell Money",
-          instructions:
-            "Transfere o valor via Africell Money e insere a referência abaixo.",
-        };
+      : payMethod === "kwik"
+        ? (coords.kwik ?? {})
+        : (coords.africell ?? {});
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto" data-ocid="subscription.page">

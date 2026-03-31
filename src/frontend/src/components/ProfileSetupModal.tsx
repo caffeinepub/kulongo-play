@@ -24,9 +24,21 @@ export default function ProfileSetupModal({ open, onComplete }: Props) {
 
   const handleRoleSelect = (selected: "artista" | "ouvinte") => {
     if (selected === "ouvinte") {
-      // Listeners skip profile setup entirely
+      // Update session role to ouvinte so isListener check passes on re-render
+      try {
+        const session = JSON.parse(
+          localStorage.getItem("kulongo_session") ?? "null",
+        );
+        if (session) {
+          session.role = "ouvinte";
+          localStorage.setItem("kulongo_session", JSON.stringify(session));
+        }
+      } catch {
+        /* ignore */
+      }
       localStorage.setItem("kulongo_user_role", "ouvinte");
-      onComplete();
+      // Reload so RootLayout re-reads the updated session and hides the modal
+      window.location.reload();
       return;
     }
     setStep("form");
